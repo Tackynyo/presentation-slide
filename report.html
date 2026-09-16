@@ -1,0 +1,2091 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- 検索エンジン除外タグ (GitHub Pages等の公開時に検索結果へ表示させない設定) -->
+    <meta name="robots" content="noindex, nofollow, noarchive">
+    <meta name="googlebot" content="noindex, nofollow, noarchive">
+    <title>Sonic Drift 走行実験レポート - 2026/09/15 11:58</title>
+    <!-- Leaflet.js (Web地図インタラクティブ描画用) -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background-color: #0f1117; color: #e5e7eb; margin: 0; padding: 24px; }
+        .container { max-width: 980px; margin: 0 auto; }
+        .header { margin-bottom: 24px; border-bottom: 1px solid #1f2937; padding-bottom: 16px; }
+        h1 { color: #f97316; margin: 0 0 8px 0; font-size: 28px; }
+        .meta { color: #9ca3af; font-size: 14px; }
+        .card { background: #181c24; border: 1px solid #282f3d; border-radius: 12px; padding: 20px; margin-bottom: 24px; }
+        .metrics-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; margin-bottom: 16px; }
+        .metric-item { background: #202632; padding: 14px; border-radius: 8px; }
+        .metric-label { font-size: 12px; color: #9ca3af; margin-bottom: 4px; }
+        .metric-value { font-size: 20px; font-weight: bold; color: #fff; }
+        
+        /* 挙動カウントカード (インタラクティブクリック対応) */
+        .counts-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; }
+        .count-item {
+            background: #202632;
+            padding: 12px;
+            border-radius: 8px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            user-select: none;
+            border: 2px solid transparent;
+        }
+        .count-item:hover {
+            background: #28303f;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        }
+        .count-item.right { border-top: 4px solid #ff8c00; }
+        .count-item.left { border-top: 4px solid #00d1ff; }
+        .count-item.accel { border-top: 4px solid #16e04d; }
+        .count-item.decel { border-top: 4px solid #ff2626; }
+        .count-item.pause { border-top: 4px solid #9ea3ad; }
+        
+        /* アクティブ状態 (ハイライト中) */
+        .count-item.active {
+            background: #283347;
+            transform: translateY(-2px);
+        }
+        .count-item.active.right { border-color: #ff8c00; box-shadow: 0 0 14px rgba(255, 140, 0, 0.45); }
+        .count-item.active.left { border-color: #00d1ff; box-shadow: 0 0 14px rgba(0, 209, 255, 0.45); }
+        .count-item.active.accel { border-color: #16e04d; box-shadow: 0 0 14px rgba(22, 224, 77, 0.45); }
+        .count-item.active.decel { border-color: #ff2626; box-shadow: 0 0 14px rgba(255, 38, 38, 0.45); }
+        .count-item.active.pause { border-color: #9ea3ad; box-shadow: 0 0 14px rgba(158, 163, 173, 0.45); }
+        
+        /* カウント確定のみモード (2回目クリック) */
+        .count-item.active.counted-mode {
+            border-style: double;
+            border-width: 4px;
+            background: #2a3854;
+        }
+        .count-item.active.counted-mode .count-hint {
+            color: #4ade80;
+            font-weight: bold;
+        }
+        
+        .count-val { font-size: 24px; font-weight: bold; margin-top: 4px; }
+        .count-hint { font-size: 11px; color: #6b7280; margin-top: 4px; }
+        .count-item:hover .count-hint { color: #9ca3af; }
+        .count-item.active .count-hint { color: #f3f4f6; font-weight: bold; }
+        
+        /* マップヘッダー & コントロール */
+        .map-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+        .map-controls { display: flex; gap: 8px; }
+        .map-btn {
+            background: #28303f;
+            color: #d1d5db;
+            border: 1px solid #374151;
+            padding: 6px 12px;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+        .map-btn:hover { background: #374151; color: #fff; }
+        .map-btn.reset { background: #ea580c; border-color: #f97316; color: #fff; }
+        .map-btn.reset:hover { background: #c2410c; }
+        
+        .filter-banner {
+            background: #1e2430;
+            border: 1px solid #374151;
+            border-radius: 6px;
+            padding: 8px 12px;
+            font-size: 12px;
+            color: #9ca3af;
+            margin-bottom: 12px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .filter-banner b { color: #f97316; }
+        
+        /* 地図表示エリア (国土地理院タイル対応) */
+        #interactive-map {
+            width: 100%;
+            height: 520px;
+            border-radius: 12px;
+            border: 1px solid #282f3d;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+            background: #e5e7eb;
+        }
+        
+        /* 国土地理院 レイヤー切替コントロール */
+        .leaflet-control-layers {
+            background: rgba(24, 28, 36, 0.94) !important;
+            color: #f3f4f6 !important;
+            border: 1px solid #374151 !important;
+            border-radius: 8px !important;
+            box-shadow: 0 4px 14px rgba(0,0,0,0.45) !important;
+            padding: 8px 12px !important;
+            font-size: 12px !important;
+        }
+        .leaflet-control-layers label {
+            color: #e5e7eb !important;
+            cursor: pointer !important;
+            margin-bottom: 3px !important;
+        }
+        .map-img { max-width: 100%; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.5); }
+        .underground-notice {
+            background: #2a1f11;
+            border: 1px solid #d97706;
+            color: #fbbf24;
+            padding: 10px 14px;
+            border-radius: 8px;
+            font-size: 13px;
+            margin-bottom: 12px;
+            text-align: center;
+        }
+        
+        /* ポップアップスタイル */
+        .leaflet-popup-content-wrapper {
+            background: #181c24;
+            color: #f3f4f6;
+            border-radius: 8px;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.6);
+            border: 1px solid #374151;
+        }
+        .leaflet-popup-tip { background: #181c24; }
+        .leaflet-popup-content { margin: 10px 14px; line-height: 1.5; }
+        
+        .legend-bar { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; margin-top: 14px; padding: 8px 14px; background: #202632; border-radius: 20px; }
+        .legend-item { display: inline-flex; align-items: center; font-size: 12px; color: #d1d5db; cursor: pointer; padding: 2px 6px; border-radius: 4px; transition: background 0.15s; }
+        .legend-item:hover { background: #374151; }
+        .legend-color { width: 12px; height: 6px; border-radius: 2px; margin-right: 5px; display: inline-block; }
+        
+        table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid #282f3d; }
+        th { background: #202632; color: #9ca3af; }
+        .badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: bold; background: #374151; color: #fff; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Sonic Drift 走行実験レポート</h1>
+            <div class="meta">日時: 2026/09/15 11:58</div>
+        </div>
+        
+        <div class="card">
+            <h2 style="font-size: 18px; margin-top:0;">走行概要</h2>
+            <div class="metrics-grid">
+                <div class="metric-item">
+                    <div class="metric-label">総走行距離</div>
+                    <div class="metric-value">4.76 km</div>
+                </div>
+                <div class="metric-item">
+                    <div class="metric-label">走行時間 (動いている時間)</div>
+                    <div class="metric-value">11分17秒</div>
+                </div>
+                <div class="metric-item">
+                    <div class="metric-label">計測時間 (再生〜停止)</div>
+                    <div class="metric-value">14分46秒</div>
+                </div>
+                <div class="metric-item">
+                    <div class="metric-label">平均速度 (走行中)</div>
+                    <div class="metric-value">25.3 km/h</div>
+                </div>
+            </div>
+            
+            <h3 style="font-size: 15px; margin: 16px 0 8px 0; color: #f97316;">挙動イベント回数（カードクリックでマップ上を強調表示）</h3>
+            <div class="counts-grid">
+                <div class="count-item right" data-filter="rightTurn" onclick="toggleFilter('rightTurn')">
+                    <div class="metric-label">右カーブ</div>
+                    <div class="count-val" style="color: #ff8c00;">26回</div>
+                    <div class="count-hint">クリックで強調</div>
+                </div>
+                <div class="count-item left" data-filter="leftTurn" onclick="toggleFilter('leftTurn')">
+                    <div class="metric-label">左カーブ</div>
+                    <div class="count-val" style="color: #00d1ff;">18回</div>
+                    <div class="count-hint">クリックで強調</div>
+                </div>
+                <div class="count-item accel" data-filter="acceleration" onclick="toggleFilter('acceleration')">
+                    <div class="metric-label">加速</div>
+                    <div class="count-val" style="color: #16e04d;">28回</div>
+                    <div class="count-hint">クリックで強調</div>
+                </div>
+                <div class="count-item decel" data-filter="deceleration" onclick="toggleFilter('deceleration')">
+                    <div class="metric-label">減速</div>
+                    <div class="count-val" style="color: #ff2626;">30回</div>
+                    <div class="count-hint">クリックで強調</div>
+                </div>
+                <div class="count-item pause" data-filter="paused" onclick="toggleFilter('paused')">
+                    <div class="metric-label">一時停止</div>
+                    <div class="count-val" style="color: #9ea3ad;">0回</div>
+                    <div class="count-hint">クリックで強調</div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card">
+            <div class="map-header">
+                <h2 style="font-size: 18px; margin:0;">走行マップ (インタラクティブ)</h2>
+                <div class="map-controls">
+                    <button class="map-btn" onclick="resetMapView()">全体を表示</button>
+                    <button id="reset-filter-btn" class="map-btn reset" onclick="clearFilter()" style="display:none;">フィルター解除</button>
+                </div>
+            </div>
+            
+            <div id="filter-banner" class="filter-banner">
+                <span id="filter-banner-text">挙動カード（右カーブ・加速など）をクリックすると、マップ上の該当区間のみを強調し、他をグレーアウトできます。</span>
+            </div>
+            
+            <!-- インタラクティブWebマップ (Leaflet.js) -->
+            <div id="interactive-map"></div>
+            
+            <!-- フォールバック / 地下走行用コンテナ -->
+            <div id="static-fallback-container" style="display: none;">
+                
+                <img class="map-img" src="map_route.png" alt="走行マップ">
+            </div>
+            
+            <div class="legend-bar">
+                <span class="legend-item" onclick="toggleFilter('straight')"><span class="legend-color" style="background:#facc15;"></span>直進</span>
+<span class="legend-item" onclick="toggleFilter('acceleration')"><span class="legend-color" style="background:#16e04d;"></span>加速</span>
+<span class="legend-item" onclick="toggleFilter('deceleration')"><span class="legend-color" style="background:#ff2626;"></span>減速</span>
+<span class="legend-item" onclick="toggleFilter('rightTurn')"><span class="legend-color" style="background:#ff8c00;"></span>右カーブ</span>
+<span class="legend-item" onclick="toggleFilter('leftTurn')"><span class="legend-color" style="background:#00d1ff;"></span>左カーブ</span><span class="legend-item" onclick="toggleFilter('rightTurn')"><span class="legend-color" style="background:#adf226;"></span>加速+右</span><span class="legend-item" onclick="toggleFilter('leftTurn')"><span class="legend-color" style="background:#2673ff;"></span>加速+左</span><span class="legend-item" onclick="toggleFilter('rightTurn')"><span class="legend-color" style="background:#fa2ea6;"></span>減速+右</span><span class="legend-item" onclick="toggleFilter('leftTurn')"><span class="legend-color" style="background:#b340f2;"></span>減速+左</span>
+            </div>
+        </div>
+        
+        <div class="card">
+            <h2 style="font-size: 18px; margin-top:0;">時系列ログ（抜粋）</h2>
+            <p style="color: #9ca3af; font-size: 12px;">全データは同フォルダ内の <code>driving_data.csv</code> より確認できます。</p>
+            <table>
+                <thead>
+                    <tr>
+                        <th>No.</th>
+                        <th>時刻</th>
+                        <th>経過</th>
+                        <th>座標 (緯度, 経度)</th>
+                        <th>速度(km/h)</th>
+                        <th>判定</th>
+                        <th>横G / 前後G</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+    <td>1</td>
+    <td>11:58:29.518</td>
+    <td>0.0s</td>
+    <td>35.709173, 139.763759</td>
+    <td>0.0</td>
+    <td><span class="badge">直進</span></td>
+    <td>0.00 / 0.00</td>
+</tr><tr>
+    <td>2</td>
+    <td>11:58:30.343</td>
+    <td>0.8s</td>
+    <td>35.709164, 139.763775</td>
+    <td>0.0</td>
+    <td><span class="badge">加速+右</span></td>
+    <td>0.55 / -0.22</td>
+</tr><tr>
+    <td>3</td>
+    <td>11:58:31.476</td>
+    <td>2.0s</td>
+    <td>35.709164, 139.763775</td>
+    <td>0.0</td>
+    <td><span class="badge">減速+左</span></td>
+    <td>-0.21 / 0.16</td>
+</tr><tr>
+    <td>4</td>
+    <td>11:58:32.261</td>
+    <td>2.7s</td>
+    <td>35.709166, 139.763776</td>
+    <td>0.0</td>
+    <td><span class="badge">左カーブ</span></td>
+    <td>-0.19 / 0.00</td>
+</tr><tr>
+    <td>5</td>
+    <td>11:58:32.801</td>
+    <td>3.3s</td>
+    <td>35.709190, 139.763839</td>
+    <td>7.1</td>
+    <td><span class="badge">右カーブ</span></td>
+    <td>0.26 / 0.02</td>
+</tr><tr>
+    <td>6</td>
+    <td>11:58:33.835</td>
+    <td>4.3s</td>
+    <td>35.709183, 139.763872</td>
+    <td>7.1</td>
+    <td><span class="badge">減速</span></td>
+    <td>-0.02 / 0.82</td>
+</tr><tr>
+    <td>7</td>
+    <td>11:58:34.834</td>
+    <td>5.3s</td>
+    <td>35.709180, 139.763878</td>
+    <td>6.6</td>
+    <td><span class="badge">直進</span></td>
+    <td>0.05 / 0.00</td>
+</tr><tr>
+    <td>8</td>
+    <td>11:58:35.843</td>
+    <td>6.3s</td>
+    <td>35.709193, 139.763866</td>
+    <td>5.5</td>
+    <td><span class="badge">右カーブ</span></td>
+    <td>0.14 / 0.00</td>
+</tr><tr>
+    <td>9</td>
+    <td>11:58:36.840</td>
+    <td>7.3s</td>
+    <td>35.709176, 139.763848</td>
+    <td>5.7</td>
+    <td><span class="badge">加速+右</span></td>
+    <td>0.71 / -0.59</td>
+</tr><tr>
+    <td>10</td>
+    <td>11:58:37.838</td>
+    <td>8.3s</td>
+    <td>35.709151, 139.763852</td>
+    <td>8.5</td>
+    <td><span class="badge">右カーブ</span></td>
+    <td>0.82 / -0.08</td>
+</tr><tr>
+    <td>11</td>
+    <td>11:58:38.843</td>
+    <td>9.3s</td>
+    <td>35.709112, 139.763852</td>
+    <td>8.5</td>
+    <td><span class="badge">加速</span></td>
+    <td>0.00 / -0.12</td>
+</tr><tr>
+    <td>12</td>
+    <td>11:58:39.841</td>
+    <td>10.3s</td>
+    <td>35.709067, 139.763846</td>
+    <td>12.7</td>
+    <td><span class="badge">右カーブ</span></td>
+    <td>0.12 / 0.00</td>
+</tr><tr>
+    <td>13</td>
+    <td>11:58:40.844</td>
+    <td>11.3s</td>
+    <td>35.709018, 139.763836</td>
+    <td>14.9</td>
+    <td><span class="badge">右カーブ</span></td>
+    <td>0.67 / 0.05</td>
+</tr><tr>
+    <td>14</td>
+    <td>11:58:41.851</td>
+    <td>12.3s</td>
+    <td>35.708977, 139.763818</td>
+    <td>17.8</td>
+    <td><span class="badge">直進</span></td>
+    <td>0.07 / -0.02</td>
+</tr><tr>
+    <td>15</td>
+    <td>11:58:42.880</td>
+    <td>13.4s</td>
+    <td>35.708930, 139.763801</td>
+    <td>18.8</td>
+    <td><span class="badge">直進</span></td>
+    <td>-0.03 / 0.00</td>
+</tr><tr>
+    <td>16</td>
+    <td>11:58:43.852</td>
+    <td>14.3s</td>
+    <td>35.708885, 139.763787</td>
+    <td>18.7</td>
+    <td><span class="badge">左カーブ</span></td>
+    <td>-0.29 / -0.10</td>
+</tr><tr>
+    <td>17</td>
+    <td>11:58:44.845</td>
+    <td>15.3s</td>
+    <td>35.708839, 139.763775</td>
+    <td>18.7</td>
+    <td><span class="badge">加速+右</span></td>
+    <td>0.16 / -0.17</td>
+</tr><tr>
+    <td>18</td>
+    <td>11:58:46.094</td>
+    <td>16.6s</td>
+    <td>35.708769, 139.763765</td>
+    <td>21.0</td>
+    <td><span class="badge">直進</span></td>
+    <td>0.00 / -0.03</td>
+</tr><tr>
+    <td>19</td>
+    <td>11:58:47.088</td>
+    <td>17.6s</td>
+    <td>35.708716, 139.763761</td>
+    <td>21.0</td>
+    <td><span class="badge">加速</span></td>
+    <td>0.04 / -0.18</td>
+</tr><tr>
+    <td>20</td>
+    <td>11:58:48.092</td>
+    <td>18.6s</td>
+    <td>35.708652, 139.763764</td>
+    <td>22.5</td>
+    <td><span class="badge">右カーブ</span></td>
+    <td>0.21 / 0.01</td>
+</tr><tr>
+    <td>21</td>
+    <td>11:58:49.087</td>
+    <td>19.6s</td>
+    <td>35.708588, 139.763775</td>
+    <td>22.5</td>
+    <td><span class="badge">直進</span></td>
+    <td>0.03 / 0.00</td>
+</tr><tr>
+    <td>22</td>
+    <td>11:58:50.101</td>
+    <td>20.6s</td>
+    <td>35.708520, 139.763769</td>
+    <td>24.5</td>
+    <td><span class="badge">直進</span></td>
+    <td>0.00 / 0.00</td>
+</tr><tr>
+    <td>23</td>
+    <td>11:58:51.103</td>
+    <td>21.6s</td>
+    <td>35.708455, 139.763765</td>
+    <td>26.3</td>
+    <td><span class="badge">右カーブ</span></td>
+    <td>0.08 / 0.00</td>
+</tr><tr>
+    <td>24</td>
+    <td>11:58:52.101</td>
+    <td>22.6s</td>
+    <td>35.708383, 139.763767</td>
+    <td>26.7</td>
+    <td><span class="badge">減速+左</span></td>
+    <td>-0.06 / 0.17</td>
+</tr><tr>
+    <td>25</td>
+    <td>11:58:53.099</td>
+    <td>23.6s</td>
+    <td>35.708316, 139.763770</td>
+    <td>26.7</td>
+    <td><span class="badge">減速</span></td>
+    <td>-0.03 / 0.15</td>
+</tr><tr>
+    <td>26</td>
+    <td>11:58:54.104</td>
+    <td>24.6s</td>
+    <td>35.708247, 139.763775</td>
+    <td>26.9</td>
+    <td><span class="badge">直進</span></td>
+    <td>-0.02 / 0.03</td>
+</tr><tr>
+    <td>27</td>
+    <td>11:58:55.103</td>
+    <td>25.6s</td>
+    <td>35.708178, 139.763780</td>
+    <td>27.2</td>
+    <td><span class="badge">減速</span></td>
+    <td>0.06 / 0.40</td>
+</tr><tr>
+    <td>28</td>
+    <td>11:58:56.101</td>
+    <td>26.6s</td>
+    <td>35.708109, 139.763782</td>
+    <td>27.3</td>
+    <td><span class="badge">減速</span></td>
+    <td>0.00 / 0.27</td>
+</tr><tr>
+    <td>29</td>
+    <td>11:58:57.096</td>
+    <td>27.6s</td>
+    <td>35.708044, 139.763785</td>
+    <td>27.2</td>
+    <td><span class="badge">減速</span></td>
+    <td>0.04 / 0.31</td>
+</tr><tr>
+    <td>30</td>
+    <td>11:58:58.101</td>
+    <td>28.6s</td>
+    <td>35.707985, 139.763783</td>
+    <td>25.9</td>
+    <td><span class="badge">加速+左</span></td>
+    <td>-0.11 / -0.13</td>
+</tr><tr>
+    <td>31</td>
+    <td>11:58:59.101</td>
+    <td>29.6s</td>
+    <td>35.707933, 139.763787</td>
+    <td>22.9</td>
+    <td><span class="badge">減速+右</span></td>
+    <td>0.08 / 0.18</td>
+</tr><tr>
+    <td>32</td>
+    <td>11:59:00.099</td>
+    <td>30.6s</td>
+    <td>35.707875, 139.763789</td>
+    <td>22.9</td>
+    <td><span class="badge">減速+左</span></td>
+    <td>-0.25 / 0.36</td>
+</tr><tr>
+    <td>33</td>
+    <td>11:59:01.099</td>
+    <td>31.6s</td>
+    <td>35.707820, 139.763788</td>
+    <td>22.6</td>
+    <td><span class="badge">減速</span></td>
+    <td>0.09 / 0.64</td>
+</tr><tr>
+    <td>34</td>
+    <td>11:59:02.115</td>
+    <td>32.6s</td>
+    <td>35.707767, 139.763789</td>
+    <td>22.1</td>
+    <td><span class="badge">減速+右</span></td>
+    <td>0.35 / 0.54</td>
+</tr><tr>
+    <td>35</td>
+    <td>11:59:03.099</td>
+    <td>33.6s</td>
+    <td>35.707729, 139.763790</td>
+    <td>17.6</td>
+    <td><span class="badge">減速</span></td>
+    <td>-0.07 / 0.66</td>
+</tr><tr>
+    <td>36</td>
+    <td>11:59:04.100</td>
+    <td>34.6s</td>
+    <td>35.707684, 139.763785</td>
+    <td>17.6</td>
+    <td><span class="badge">減速+左</span></td>
+    <td>-0.50 / 0.74</td>
+</tr><tr>
+    <td>37</td>
+    <td>11:59:05.097</td>
+    <td>35.6s</td>
+    <td>35.707661, 139.763787</td>
+    <td>14.5</td>
+    <td><span class="badge">減速</span></td>
+    <td>0.06 / 0.58</td>
+</tr><tr>
+    <td>38</td>
+    <td>11:59:06.093</td>
+    <td>36.6s</td>
+    <td>35.707643, 139.763782</td>
+    <td>9.6</td>
+    <td><span class="badge">減速+左</span></td>
+    <td>-0.09 / 0.08</td>
+</tr><tr>
+    <td>39</td>
+    <td>11:59:07.093</td>
+    <td>37.6s</td>
+    <td>35.707623, 139.763788</td>
+    <td>7.6</td>
+    <td><span class="badge">直進</span></td>
+    <td>0.00 / 0.00</td>
+</tr><tr>
+    <td>40</td>
+    <td>11:59:08.101</td>
+    <td>38.6s</td>
+    <td>35.707614, 139.763787</td>
+    <td>4.3</td>
+    <td><span class="badge">直進</span></td>
+    <td>0.00 / 0.05</td>
+</tr><tr>
+    <td>41</td>
+    <td>11:59:09.102</td>
+    <td>39.6s</td>
+    <td>35.707628, 139.763800</td>
+    <td>5.0</td>
+    <td><span class="badge">直進</span></td>
+    <td>0.00 / 0.00</td>
+</tr><tr>
+    <td>42</td>
+    <td>11:59:10.098</td>
+    <td>40.6s</td>
+    <td>35.707620, 139.763803</td>
+    <td>4.3</td>
+    <td><span class="badge">減速</span></td>
+    <td>0.00 / 0.11</td>
+</tr><tr>
+    <td>43</td>
+    <td>11:59:11.099</td>
+    <td>41.6s</td>
+    <td>35.707615, 139.763803</td>
+    <td>2.5</td>
+    <td><span class="badge">直進</span></td>
+    <td>0.00 / 0.00</td>
+</tr><tr>
+    <td>44</td>
+    <td>11:59:12.101</td>
+    <td>42.6s</td>
+    <td>35.707609, 139.763804</td>
+    <td>1.9</td>
+    <td><span class="badge">直進</span></td>
+    <td>0.00 / 0.00</td>
+</tr><tr>
+    <td>45</td>
+    <td>11:59:13.098</td>
+    <td>43.6s</td>
+    <td>35.707606, 139.763805</td>
+    <td>1.2</td>
+    <td><span class="badge">加速</span></td>
+    <td>-0.05 / -0.22</td>
+</tr><tr>
+    <td>46</td>
+    <td>11:59:14.098</td>
+    <td>44.6s</td>
+    <td>35.707591, 139.763809</td>
+    <td>4.1</td>
+    <td><span class="badge">直進</span></td>
+    <td>-0.02 / 0.00</td>
+</tr><tr>
+    <td>47</td>
+    <td>11:59:15.093</td>
+    <td>45.6s</td>
+    <td>35.707575, 139.763815</td>
+    <td>6.2</td>
+    <td><span class="badge">左カーブ</span></td>
+    <td>-0.15 / 0.00</td>
+</tr><tr>
+    <td>48</td>
+    <td>11:59:16.112</td>
+    <td>46.6s</td>
+    <td>35.707568, 139.763821</td>
+    <td>5.3</td>
+    <td><span class="badge">加速+左</span></td>
+    <td>-0.30 / -0.56</td>
+</tr><tr>
+    <td>49</td>
+    <td>11:59:17.097</td>
+    <td>47.6s</td>
+    <td>35.707555, 139.763835</td>
+    <td>6.2</td>
+    <td><span class="badge">加速+左</span></td>
+    <td>-0.15 / -0.34</td>
+</tr><tr>
+    <td>50</td>
+    <td>11:59:18.097</td>
+    <td>48.6s</td>
+    <td>35.707541, 139.763848</td>
+    <td>6.4</td>
+    <td><span class="badge">加速+左</span></td>
+    <td>-0.40 / -0.55</td>
+</tr><tr>
+    <td>51</td>
+    <td>11:59:19.101</td>
+    <td>49.6s</td>
+    <td>35.707535, 139.763868</td>
+    <td>5.8</td>
+    <td><span class="badge">加速</span></td>
+    <td>-0.02 / -0.42</td>
+</tr><tr>
+    <td>52</td>
+    <td>11:59:20.100</td>
+    <td>50.6s</td>
+    <td>35.707522, 139.763914</td>
+    <td>10.2</td>
+    <td><span class="badge">右カーブ</span></td>
+    <td>0.18 / 0.00</td>
+</tr><tr>
+    <td>53</td>
+    <td>11:59:21.105</td>
+    <td>51.6s</td>
+    <td>35.707516, 139.763967</td>
+    <td>14.0</td>
+    <td><span class="badge">直進</span></td>
+    <td>0.00 / 0.00</td>
+</tr><tr>
+    <td>54</td>
+    <td>11:59:22.100</td>
+    <td>52.6s</td>
+    <td>35.707521, 139.764029</td>
+    <td>16.9</td>
+    <td><span class="badge">加速</span></td>
+    <td>0.00 / -0.15</td>
+</tr><tr>
+    <td>55</td>
+    <td>11:59:23.101</td>
+    <td>53.6s</td>
+    <td>35.707512, 139.764091</td>
+    <td>19.6</td>
+    <td><span class="badge">加速</span></td>
+    <td>0.00 / -0.10</td>
+</tr><tr>
+    <td>56</td>
+    <td>11:59:24.102</td>
+    <td>54.6s</td>
+    <td>35.707514, 139.764145</td>
+    <td>18.2</td>
+    <td><span class="badge">右カーブ</span></td>
+    <td>0.10 / 0.00</td>
+</tr><tr>
+    <td>57</td>
+    <td>11:59:25.103</td>
+    <td>55.6s</td>
+    <td>35.707507, 139.764212</td>
+    <td>20.4</td>
+    <td><span class="badge">右カーブ</span></td>
+    <td>0.08 / 0.00</td>
+</tr><tr>
+    <td>58</td>
+    <td>11:59:26.097</td>
+    <td>56.6s</td>
+    <td>35.707503, 139.764272</td>
+    <td>20.3</td>
+    <td><span class="badge">直進</span></td>
+    <td>0.04 / 0.00</td>
+</tr><tr>
+    <td>59</td>
+    <td>11:59:27.386</td>
+    <td>57.9s</td>
+    <td>35.707496, 139.764338</td>
+    <td>21.0</td>
+    <td><span class="badge">直進</span></td>
+    <td>0.00 / 0.00</td>
+</tr><tr>
+    <td>60</td>
+    <td>11:59:28.097</td>
+    <td>58.6s</td>
+    <td>35.707494, 139.764408</td>
+    <td>22.3</td>
+    <td><span class="badge">加速</span></td>
+    <td>0.00 / -0.35</td>
+</tr><tr>
+    <td>61</td>
+    <td>11:59:29.102</td>
+    <td>59.6s</td>
+    <td>35.707489, 139.764483</td>
+    <td>24.1</td>
+    <td><span class="badge">加速+右</span></td>
+    <td>0.09 / -0.05</td>
+</tr><tr>
+    <td>62</td>
+    <td>11:59:30.101</td>
+    <td>60.6s</td>
+    <td>35.707478, 139.764570</td>
+    <td>27.1</td>
+    <td><span class="badge">直進</span></td>
+    <td>0.00 / -0.02</td>
+</tr><tr>
+    <td>63</td>
+    <td>11:59:31.103</td>
+    <td>61.6s</td>
+    <td>35.707472, 139.764661</td>
+    <td>29.0</td>
+    <td><span class="badge">直進</span></td>
+    <td>0.00 / -0.06</td>
+</tr><tr>
+    <td>64</td>
+    <td>11:59:32.098</td>
+    <td>62.6s</td>
+    <td>35.707469, 139.764755</td>
+    <td>30.3</td>
+    <td><span class="badge">減速</span></td>
+    <td>0.05 / 0.38</td>
+</tr><tr>
+    <td>65</td>
+    <td>11:59:33.103</td>
+    <td>63.6s</td>
+    <td>35.707463, 139.764844</td>
+    <td>29.3</td>
+    <td><span class="badge">減速</span></td>
+    <td>0.02 / 0.20</td>
+</tr><tr>
+    <td>66</td>
+    <td>11:59:34.101</td>
+    <td>64.6s</td>
+    <td>35.707458, 139.764933</td>
+    <td>28.5</td>
+    <td><span class="badge">直進</span></td>
+    <td>0.01 / 0.00</td>
+</tr><tr>
+    <td>67</td>
+    <td>11:59:35.107</td>
+    <td>65.6s</td>
+    <td>35.707451, 139.765022</td>
+    <td>28.6</td>
+    <td><span class="badge">加速</span></td>
+    <td>-0.05 / -0.20</td>
+</tr><tr>
+    <td>68</td>
+    <td>11:59:36.098</td>
+    <td>66.6s</td>
+    <td>35.707440, 139.765114</td>
+    <td>29.6</td>
+    <td><span class="badge">直進</span></td>
+    <td>0.00 / -0.04</td>
+</tr><tr>
+    <td>69</td>
+    <td>11:59:37.103</td>
+    <td>67.6s</td>
+    <td>35.707428, 139.765204</td>
+    <td>30.0</td>
+    <td><span class="badge">直進</span></td>
+    <td>0.05 / 0.00</td>
+</tr><tr>
+    <td>70</td>
+    <td>11:59:38.100</td>
+    <td>68.6s</td>
+    <td>35.707419, 139.765302</td>
+    <td>30.8</td>
+    <td><span class="badge">左カーブ</span></td>
+    <td>-0.14 / 0.00</td>
+</tr><tr>
+    <td>71</td>
+    <td>11:59:39.097</td>
+    <td>69.6s</td>
+    <td>35.707406, 139.765408</td>
+    <td>32.7</td>
+    <td><span class="badge">左カーブ</span></td>
+    <td>-0.09 / 0.00</td>
+</tr><tr>
+    <td>72</td>
+    <td>11:59:40.099</td>
+    <td>70.6s</td>
+    <td>35.707397, 139.765518</td>
+    <td>34.9</td>
+    <td><span class="badge">直進</span></td>
+    <td>0.00 / 0.00</td>
+</tr><tr>
+    <td>73</td>
+    <td>11:59:41.101</td>
+    <td>71.6s</td>
+    <td>35.707402, 139.765619</td>
+    <td>33.3</td>
+    <td><span class="badge">減速</span></td>
+    <td>0.00 / 0.14</td>
+</tr><tr>
+    <td>74</td>
+    <td>11:59:42.099</td>
+    <td>72.6s</td>
+    <td>35.707399, 139.765720</td>
+    <td>32.6</td>
+    <td><span class="badge">減速+左</span></td>
+    <td>-0.53 / 0.33</td>
+</tr><tr>
+    <td>75</td>
+    <td>11:59:43.093</td>
+    <td>73.6s</td>
+    <td>35.707387, 139.765807</td>
+    <td>28.9</td>
+    <td><span class="badge">減速+左</span></td>
+    <td>-0.75 / 0.41</td>
+</tr><tr>
+    <td>76</td>
+    <td>11:59:44.100</td>
+    <td>74.6s</td>
+    <td>35.707398, 139.765918</td>
+    <td>32.4</td>
+    <td><span class="badge">左カーブ</span></td>
+    <td>-0.88 / 0.05</td>
+</tr><tr>
+    <td>77</td>
+    <td>11:59:45.094</td>
+    <td>75.6s</td>
+    <td>35.707408, 139.766008</td>
+    <td>30.6</td>
+    <td><span class="badge">左カーブ</span></td>
+    <td>-0.44 / 0.00</td>
+</tr><tr>
+    <td>78</td>
+    <td>11:59:46.105</td>
+    <td>76.6s</td>
+    <td>35.707449, 139.766098</td>
+    <td>31.6</td>
+    <td><span class="badge">左カーブ</span></td>
+    <td>-0.08 / 0.00</td>
+</tr><tr>
+    <td>79</td>
+    <td>11:59:47.087</td>
+    <td>77.6s</td>
+    <td>35.707465, 139.766194</td>
+    <td>31.3</td>
+    <td><span class="badge">加速+右</span></td>
+    <td>0.09 / -0.09</td>
+</tr><tr>
+    <td>80</td>
+    <td>11:59:48.091</td>
+    <td>78.6s</td>
+    <td>35.707489, 139.766296</td>
+    <td>33.2</td>
+    <td><span class="badge">直進</span></td>
+    <td>0.00 / 0.00</td>
+</tr><tr>
+    <td>81</td>
+    <td>11:59:49.102</td>
+    <td>79.6s</td>
+    <td>35.707512, 139.766405</td>
+    <td>35.6</td>
+    <td><span class="badge">直進</span></td>
+    <td>0.05 / 0.00</td>
+</tr><tr>
+    <td>82</td>
+    <td>11:59:50.097</td>
+    <td>80.6s</td>
+    <td>35.707543, 139.766510</td>
+    <td>36.2</td>
+    <td><span class="badge">減速</span></td>
+    <td>0.03 / 0.23</td>
+</tr><tr>
+    <td>83</td>
+    <td>11:59:51.096</td>
+    <td>81.6s</td>
+    <td>35.707569, 139.766617</td>
+    <td>36.1</td>
+    <td><span class="badge">左カーブ</span></td>
+    <td>-0.49 / 0.17</td>
+</tr><tr>
+    <td>84</td>
+    <td>11:59:52.093</td>
+    <td>82.6s</td>
+    <td>35.707595, 139.766720</td>
+    <td>35.3</td>
+    <td><span class="badge">減速+左</span></td>
+    <td>-0.23 / 0.17</td>
+</tr><tr>
+    <td>85</td>
+    <td>11:59:53.104</td>
+    <td>83.6s</td>
+    <td>35.707637, 139.766818</td>
+    <td>35.8</td>
+    <td><span class="badge">加速+左</span></td>
+    <td>-0.10 / -0.05</td>
+</tr><tr>
+    <td>86</td>
+    <td>11:59:54.099</td>
+    <td>84.6s</td>
+    <td>35.707677, 139.766914</td>
+    <td>35.4</td>
+    <td><span class="badge">左カーブ</span></td>
+    <td>-0.29 / -0.06</td>
+</tr><tr>
+    <td>87</td>
+    <td>11:59:55.099</td>
+    <td>85.6s</td>
+    <td>35.707725, 139.767012</td>
+    <td>36.7</td>
+    <td><span class="badge">直進</span></td>
+    <td>0.00 / 0.00</td>
+</tr><tr>
+    <td>88</td>
+    <td>11:59:56.101</td>
+    <td>86.6s</td>
+    <td>35.707774, 139.767117</td>
+    <td>38.6</td>
+    <td><span class="badge">左カーブ</span></td>
+    <td>-0.13 / 0.00</td>
+</tr><tr>
+    <td>89</td>
+    <td>11:59:57.109</td>
+    <td>87.6s</td>
+    <td>35.707827, 139.767221</td>
+    <td>39.9</td>
+    <td><span class="badge">直進</span></td>
+    <td>-0.03 / 0.00</td>
+</tr><tr>
+    <td>90</td>
+    <td>11:59:58.101</td>
+    <td>88.6s</td>
+    <td>35.707881, 139.767328</td>
+    <td>40.8</td>
+    <td><span class="badge">直進</span></td>
+    <td>0.02 / -0.04</td>
+</tr><tr>
+    <td>91</td>
+    <td>11:59:59.098</td>
+    <td>89.6s</td>
+    <td>35.707936, 139.767437</td>
+    <td>41.6</td>
+    <td><span class="badge">直進</span></td>
+    <td>-0.03 / 0.00</td>
+</tr><tr>
+    <td>92</td>
+    <td>12:00:00.088</td>
+    <td>90.6s</td>
+    <td>35.707997, 139.767545</td>
+    <td>42.7</td>
+    <td><span class="badge">減速+右</span></td>
+    <td>0.28 / 0.13</td>
+</tr><tr>
+    <td>93</td>
+    <td>12:00:01.105</td>
+    <td>91.6s</td>
+    <td>35.708058, 139.767652</td>
+    <td>42.6</td>
+    <td><span class="badge">減速+右</span></td>
+    <td>0.18 / 0.12</td>
+</tr><tr>
+    <td>94</td>
+    <td>12:00:02.101</td>
+    <td>92.6s</td>
+    <td>35.708117, 139.767764</td>
+    <td>42.7</td>
+    <td><span class="badge">右カーブ</span></td>
+    <td>0.13 / 0.00</td>
+</tr><tr>
+    <td>95</td>
+    <td>12:00:03.101</td>
+    <td>93.6s</td>
+    <td>35.708177, 139.767871</td>
+    <td>42.5</td>
+    <td><span class="badge">右カーブ</span></td>
+    <td>0.27 / 0.00</td>
+</tr><tr>
+    <td>96</td>
+    <td>12:00:04.096</td>
+    <td>94.6s</td>
+    <td>35.708231, 139.767984</td>
+    <td>42.4</td>
+    <td><span class="badge">右カーブ</span></td>
+    <td>0.87 / -0.30</td>
+</tr><tr>
+    <td>97</td>
+    <td>12:00:05.097</td>
+    <td>95.6s</td>
+    <td>35.708281, 139.768098</td>
+    <td>42.2</td>
+    <td><span class="badge">右カーブ</span></td>
+    <td>0.54 / 0.00</td>
+</tr><tr>
+    <td>98</td>
+    <td>12:00:06.100</td>
+    <td>96.6s</td>
+    <td>35.708321, 139.768219</td>
+    <td>42.3</td>
+    <td><span class="badge">右カーブ</span></td>
+    <td>0.85 / 0.00</td>
+</tr><tr>
+    <td>99</td>
+    <td>12:00:07.102</td>
+    <td>97.6s</td>
+    <td>35.708353, 139.768344</td>
+    <td>42.2</td>
+    <td><span class="badge">右カーブ</span></td>
+    <td>0.98 / 0.02</td>
+</tr><tr>
+    <td>100</td>
+    <td>12:00:08.102</td>
+    <td>98.6s</td>
+    <td>35.708371, 139.768464</td>
+    <td>40.0</td>
+    <td><span class="badge">減速+右</span></td>
+    <td>0.84 / 0.37</td>
+</tr><tr>
+    <td>101</td>
+    <td>12:00:09.103</td>
+    <td>99.6s</td>
+    <td>35.708379, 139.768581</td>
+    <td>38.1</td>
+    <td><span class="badge">右カーブ</span></td>
+    <td>0.56 / 0.19</td>
+</tr><tr>
+    <td>102</td>
+    <td>12:00:10.097</td>
+    <td>100.6s</td>
+    <td>35.708385, 139.768692</td>
+    <td>36.3</td>
+    <td><span class="badge">減速</span></td>
+    <td>-0.02 / 0.58</td>
+</tr><tr>
+    <td>103</td>
+    <td>12:00:11.096</td>
+    <td>101.6s</td>
+    <td>35.708392, 139.768797</td>
+    <td>34.6</td>
+    <td><span class="badge">減速</span></td>
+    <td>0.16 / 0.49</td>
+</tr><tr>
+    <td>104</td>
+    <td>12:00:12.107</td>
+    <td>102.6s</td>
+    <td>35.708401, 139.768894</td>
+    <td>32.4</td>
+    <td><span class="badge">減速</span></td>
+    <td>0.09 / 0.30</td>
+</tr><tr>
+    <td>105</td>
+    <td>12:00:13.091</td>
+    <td>103.6s</td>
+    <td>35.708414, 139.768984</td>
+    <td>30.5</td>
+    <td><span class="badge">右カーブ</span></td>
+    <td>0.21 / 0.04</td>
+</tr><tr>
+    <td>106</td>
+    <td>12:00:14.098</td>
+    <td>104.6s</td>
+    <td>35.708427, 139.769074</td>
+    <td>29.8</td>
+    <td><span class="badge">右カーブ</span></td>
+    <td>0.16 / 0.00</td>
+</tr><tr>
+    <td>107</td>
+    <td>12:00:15.093</td>
+    <td>105.6s</td>
+    <td>35.708417, 139.769160</td>
+    <td>29.2</td>
+    <td><span class="badge">減速+右</span></td>
+    <td>0.10 / 0.15</td>
+</tr><tr>
+    <td>108</td>
+    <td>12:00:16.101</td>
+    <td>106.6s</td>
+    <td>35.708410, 139.769247</td>
+    <td>28.5</td>
+    <td><span class="badge">右カーブ</span></td>
+    <td>0.09 / 0.00</td>
+</tr><tr>
+    <td>109</td>
+    <td>12:00:17.098</td>
+    <td>107.6s</td>
+    <td>35.708403, 139.769330</td>
+    <td>27.3</td>
+    <td><span class="badge">減速+右</span></td>
+    <td>0.18 / 0.09</td>
+</tr><tr>
+    <td>110</td>
+    <td>12:00:18.090</td>
+    <td>108.6s</td>
+    <td>35.708388, 139.769403</td>
+    <td>24.2</td>
+    <td><span class="badge">減速</span></td>
+    <td>0.17 / 0.86</td>
+</tr><tr>
+    <td>111</td>
+    <td>12:00:19.092</td>
+    <td>109.6s</td>
+    <td>35.708385, 139.769465</td>
+    <td>20.4</td>
+    <td><span class="badge">減速</span></td>
+    <td>0.10 / 0.81</td>
+</tr><tr>
+    <td>112</td>
+    <td>12:00:20.098</td>
+    <td>110.6s</td>
+    <td>35.708383, 139.769513</td>
+    <td>15.9</td>
+    <td><span class="badge">減速</span></td>
+    <td>0.00 / 0.88</td>
+</tr><tr>
+    <td>113</td>
+    <td>12:00:21.094</td>
+    <td>111.6s</td>
+    <td>35.708381, 139.769545</td>
+    <td>11.1</td>
+    <td><span class="badge">減速</span></td>
+    <td>0.20 / 0.73</td>
+</tr><tr>
+    <td>114</td>
+    <td>12:00:22.094</td>
+    <td>112.6s</td>
+    <td>35.708380, 139.769562</td>
+    <td>6.4</td>
+    <td><span class="badge">減速</span></td>
+    <td>0.00 / 0.45</td>
+</tr><tr>
+    <td>115</td>
+    <td>12:00:23.095</td>
+    <td>113.6s</td>
+    <td>35.708379, 139.769575</td>
+    <td>4.2</td>
+    <td><span class="badge">直進</span></td>
+    <td>0.00 / 0.00</td>
+</tr><tr>
+    <td>116</td>
+    <td>12:00:24.097</td>
+    <td>114.6s</td>
+    <td>35.708379, 139.769583</td>
+    <td>2.6</td>
+    <td><span class="badge">直進</span></td>
+    <td>0.00 / 0.00</td>
+</tr><tr>
+    <td>117</td>
+    <td>12:00:25.093</td>
+    <td>115.6s</td>
+    <td>35.708379, 139.769588</td>
+    <td>1.0</td>
+    <td><span class="badge">直進</span></td>
+    <td>0.00 / 0.00</td>
+</tr><tr>
+    <td>118</td>
+    <td>12:00:26.097</td>
+    <td>116.6s</td>
+    <td>35.708379, 139.769589</td>
+    <td>0.2</td>
+    <td><span class="badge">直進</span></td>
+    <td>0.00 / 0.00</td>
+</tr><tr>
+    <td>119</td>
+    <td>12:00:27.097</td>
+    <td>117.6s</td>
+    <td>35.708379, 139.769590</td>
+    <td>0.3</td>
+    <td><span class="badge">加速</span></td>
+    <td>0.00 / -0.39</td>
+</tr><tr>
+    <td>120</td>
+    <td>12:00:28.094</td>
+    <td>118.6s</td>
+    <td>35.708378, 139.769592</td>
+    <td>0.7</td>
+    <td><span class="badge">加速</span></td>
+    <td>-0.01 / -0.41</td>
+</tr><tr>
+    <td>121</td>
+    <td>12:00:29.097</td>
+    <td>119.6s</td>
+    <td>35.708378, 139.769603</td>
+    <td>3.2</td>
+    <td><span class="badge">加速+左</span></td>
+    <td>-0.24 / -0.54</td>
+</tr><tr>
+    <td>122</td>
+    <td>12:00:30.096</td>
+    <td>120.6s</td>
+    <td>35.708377, 139.769619</td>
+    <td>5.4</td>
+    <td><span class="badge">左カーブ</span></td>
+    <td>-0.14 / -0.02</td>
+</tr><tr>
+    <td>123</td>
+    <td>12:00:31.098</td>
+    <td>121.6s</td>
+    <td>35.708376, 139.769640</td>
+    <td>6.8</td>
+    <td><span class="badge">直進</span></td>
+    <td>0.00 / 0.00</td>
+</tr><tr>
+    <td>124</td>
+    <td>12:00:32.100</td>
+    <td>122.6s</td>
+    <td>35.708375, 139.769662</td>
+    <td>7.1</td>
+    <td><span class="badge">直進</span></td>
+    <td>0.00 / 0.00</td>
+</tr><tr>
+    <td>125</td>
+    <td>12:00:33.099</td>
+    <td>123.6s</td>
+    <td>35.708374, 139.769684</td>
+    <td>7.0</td>
+    <td><span class="badge">減速</span></td>
+    <td>0.00 / 0.31</td>
+</tr><tr>
+    <td>126</td>
+    <td>12:00:34.095</td>
+    <td>124.6s</td>
+    <td>35.708373, 139.769695</td>
+    <td>4.4</td>
+    <td><span class="badge">直進</span></td>
+    <td>0.00 / 0.00</td>
+</tr><tr>
+    <td>127</td>
+    <td>12:00:35.099</td>
+    <td>125.6s</td>
+    <td>35.708372, 139.769705</td>
+    <td>3.0</td>
+    <td><span class="badge">直進</span></td>
+    <td>0.00 / 0.00</td>
+</tr><tr>
+    <td>128</td>
+    <td>12:00:36.098</td>
+    <td>126.6s</td>
+    <td>35.708372, 139.769709</td>
+    <td>1.3</td>
+    <td><span class="badge">直進</span></td>
+    <td>0.00 / 0.00</td>
+</tr><tr>
+    <td>129</td>
+    <td>12:00:37.095</td>
+    <td>127.6s</td>
+    <td>35.708372, 139.769709</td>
+    <td>0.4</td>
+    <td><span class="badge">直進</span></td>
+    <td>0.00 / 0.00</td>
+</tr><tr>
+    <td>130</td>
+    <td>12:00:38.096</td>
+    <td>128.6s</td>
+    <td>35.708372, 139.769708</td>
+    <td>0.2</td>
+    <td><span class="badge">直進</span></td>
+    <td>0.00 / 0.00</td>
+</tr><tr>
+    <td>131</td>
+    <td>12:00:39.101</td>
+    <td>129.6s</td>
+    <td>35.708372, 139.769709</td>
+    <td>0.3</td>
+    <td><span class="badge">直進</span></td>
+    <td>0.00 / 0.00</td>
+</tr><tr>
+    <td>132</td>
+    <td>12:00:40.099</td>
+    <td>130.6s</td>
+    <td>35.708372, 139.769708</td>
+    <td>0.1</td>
+    <td><span class="badge">直進</span></td>
+    <td>0.00 / 0.00</td>
+</tr><tr>
+    <td>133</td>
+    <td>12:00:41.096</td>
+    <td>131.6s</td>
+    <td>35.708372, 139.769708</td>
+    <td>0.1</td>
+    <td><span class="badge">直進</span></td>
+    <td>0.00 / 0.00</td>
+</tr><tr>
+    <td>134</td>
+    <td>12:00:42.094</td>
+    <td>132.6s</td>
+    <td>35.708372, 139.769708</td>
+    <td>0.0</td>
+    <td><span class="badge">直進</span></td>
+    <td>0.00 / 0.00</td>
+</tr><tr>
+    <td>135</td>
+    <td>12:00:43.094</td>
+    <td>133.6s</td>
+    <td>35.708372, 139.769708</td>
+    <td>0.0</td>
+    <td><span class="badge">直進</span></td>
+    <td>0.00 / 0.00</td>
+</tr><tr>
+    <td>136</td>
+    <td>12:00:44.099</td>
+    <td>134.6s</td>
+    <td>35.708372, 139.769708</td>
+    <td>0.0</td>
+    <td><span class="badge">直進</span></td>
+    <td>0.00 / 0.00</td>
+</tr><tr>
+    <td>137</td>
+    <td>12:00:45.095</td>
+    <td>135.6s</td>
+    <td>35.708372, 139.769708</td>
+    <td>0.0</td>
+    <td><span class="badge">直進</span></td>
+    <td>0.00 / 0.00</td>
+</tr><tr>
+    <td>138</td>
+    <td>12:00:46.094</td>
+    <td>136.6s</td>
+    <td>35.708372, 139.769708</td>
+    <td>0.0</td>
+    <td><span class="badge">直進</span></td>
+    <td>0.00 / 0.00</td>
+</tr><tr>
+    <td>139</td>
+    <td>12:00:47.097</td>
+    <td>137.6s</td>
+    <td>35.708372, 139.769708</td>
+    <td>0.0</td>
+    <td><span class="badge">直進</span></td>
+    <td>0.00 / 0.00</td>
+</tr><tr>
+    <td>140</td>
+    <td>12:00:48.099</td>
+    <td>138.6s</td>
+    <td>35.708372, 139.769708</td>
+    <td>0.0</td>
+    <td><span class="badge">直進</span></td>
+    <td>0.00 / 0.00</td>
+</tr><tr>
+    <td>141</td>
+    <td>12:00:49.093</td>
+    <td>139.6s</td>
+    <td>35.708372, 139.769708</td>
+    <td>0.0</td>
+    <td><span class="badge">直進</span></td>
+    <td>0.00 / 0.00</td>
+</tr><tr>
+    <td>142</td>
+    <td>12:00:50.098</td>
+    <td>140.6s</td>
+    <td>35.708372, 139.769708</td>
+    <td>0.0</td>
+    <td><span class="badge">加速</span></td>
+    <td>0.00 / -0.30</td>
+</tr><tr>
+    <td>143</td>
+    <td>12:00:51.093</td>
+    <td>141.6s</td>
+    <td>35.708372, 139.769713</td>
+    <td>1.6</td>
+    <td><span class="badge">加速+左</span></td>
+    <td>-0.20 / -0.47</td>
+</tr><tr>
+    <td>144</td>
+    <td>12:00:52.097</td>
+    <td>142.6s</td>
+    <td>35.708371, 139.769731</td>
+    <td>5.0</td>
+    <td><span class="badge">直進</span></td>
+    <td>0.00 / 0.00</td>
+</tr><tr>
+    <td>145</td>
+    <td>12:00:53.095</td>
+    <td>143.6s</td>
+    <td>35.708370, 139.769749</td>
+    <td>5.7</td>
+    <td><span class="badge">左カーブ</span></td>
+    <td>-0.13 / 0.00</td>
+</tr><tr>
+    <td>146</td>
+    <td>12:00:54.097</td>
+    <td>144.6s</td>
+    <td>35.708369, 139.769765</td>
+    <td>5.7</td>
+    <td><span class="badge">左カーブ</span></td>
+    <td>-0.59 / 0.00</td>
+</tr><tr>
+    <td>147</td>
+    <td>12:00:55.095</td>
+    <td>145.6s</td>
+    <td>35.708368, 139.769787</td>
+    <td>7.3</td>
+    <td><span class="badge">左カーブ</span></td>
+    <td>-0.77 / 0.00</td>
+</tr><tr>
+    <td>148</td>
+    <td>12:00:56.100</td>
+    <td>146.6s</td>
+    <td>35.708367, 139.769806</td>
+    <td>10.4</td>
+    <td><span class="badge">加速+左</span></td>
+    <td>-0.76 / -0.47</td>
+</tr><tr>
+    <td>149</td>
+    <td>12:00:57.098</td>
+    <td>147.6s</td>
+    <td>35.708376, 139.769823</td>
+    <td>14.4</td>
+    <td><span class="badge">左カーブ</span></td>
+    <td>-0.94 / -0.04</td>
+</tr><tr>
+    <td>150</td>
+    <td>12:00:58.093</td>
+    <td>148.6s</td>
+    <td>35.708497, 139.769846</td>
+    <td>16.1</td>
+    <td><span class="badge">左カーブ</span></td>
+    <td>-0.98 / 0.00</td>
+</tr><tr>
+    <td>151</td>
+    <td>12:00:59.093</td>
+    <td>149.6s</td>
+    <td>35.708530, 139.769852</td>
+    <td>14.6</td>
+    <td><span class="badge">左カーブ</span></td>
+    <td>-0.08 / 0.00</td>
+</tr><tr>
+    <td>152</td>
+    <td>12:01:00.094</td>
+    <td>150.6s</td>
+    <td>35.708578, 139.769840</td>
+    <td>15.4</td>
+    <td><span class="badge">直進</span></td>
+    <td>0.00 / -0.04</td>
+</tr><tr>
+    <td>153</td>
+    <td>12:01:01.096</td>
+    <td>151.6s</td>
+    <td>35.708674, 139.769820</td>
+    <td>26.5</td>
+    <td><span class="badge">減速</span></td>
+    <td>0.00 / 0.12</td>
+</tr><tr>
+    <td>154</td>
+    <td>12:01:02.094</td>
+    <td>152.6s</td>
+    <td>35.708743, 139.769814</td>
+    <td>27.0</td>
+    <td><span class="badge">減速</span></td>
+    <td>0.11 / 0.39</td>
+</tr><tr>
+    <td>155</td>
+    <td>12:01:03.099</td>
+    <td>153.6s</td>
+    <td>35.708786, 139.769794</td>
+    <td>21.4</td>
+    <td><span class="badge">右カーブ</span></td>
+    <td>0.19 / 0.07</td>
+</tr><tr>
+    <td>156</td>
+    <td>12:01:04.099</td>
+    <td>154.6s</td>
+    <td>35.708833, 139.769784</td>
+    <td>19.2</td>
+    <td><span class="badge">右カーブ</span></td>
+    <td>0.41 / 0.01</td>
+</tr><tr>
+    <td>157</td>
+    <td>12:01:05.096</td>
+    <td>155.6s</td>
+    <td>35.708882, 139.769770</td>
+    <td>18.9</td>
+    <td><span class="badge">減速</span></td>
+    <td>0.07 / 0.23</td>
+</tr><tr>
+    <td>158</td>
+    <td>12:01:06.099</td>
+    <td>156.6s</td>
+    <td>35.708925, 139.769766</td>
+    <td>17.5</td>
+    <td><span class="badge">減速+右</span></td>
+    <td>0.45 / 0.51</td>
+</tr><tr>
+    <td>159</td>
+    <td>12:01:07.098</td>
+    <td>157.6s</td>
+    <td>35.708958, 139.769761</td>
+    <td>14.2</td>
+    <td><span class="badge">減速</span></td>
+    <td>0.14 / 0.63</td>
+</tr><tr>
+    <td>160</td>
+    <td>12:01:08.096</td>
+    <td>158.6s</td>
+    <td>35.708985, 139.769756</td>
+    <td>11.1</td>
+    <td><span class="badge">減速+右</span></td>
+    <td>0.47 / 0.60</td>
+</tr><tr>
+    <td>161</td>
+    <td>12:01:09.097</td>
+    <td>159.6s</td>
+    <td>35.709000, 139.769757</td>
+    <td>6.6</td>
+    <td><span class="badge">減速+右</span></td>
+    <td>0.45 / 0.70</td>
+</tr><tr>
+    <td>162</td>
+    <td>12:01:10.094</td>
+    <td>160.6s</td>
+    <td>35.709004, 139.769756</td>
+    <td>2.2</td>
+    <td><span class="badge">減速</span></td>
+    <td>0.15 / 0.45</td>
+</tr><tr>
+    <td>163</td>
+    <td>12:01:11.104</td>
+    <td>161.6s</td>
+    <td>35.709003, 139.769755</td>
+    <td>0.3</td>
+    <td><span class="badge">直進</span></td>
+    <td>0.00 / 0.00</td>
+</tr><tr>
+    <td>164</td>
+    <td>12:01:12.105</td>
+    <td>162.6s</td>
+    <td>35.709006, 139.769755</td>
+    <td>0.7</td>
+    <td><span class="badge">直進</span></td>
+    <td>0.00 / 0.00</td>
+</tr><tr>
+    <td>165</td>
+    <td>12:01:13.099</td>
+    <td>163.6s</td>
+    <td>35.709005, 139.769760</td>
+    <td>0.6</td>
+    <td><span class="badge">直進</span></td>
+    <td>0.00 / 0.00</td>
+</tr><tr>
+    <td>166</td>
+    <td>12:01:14.095</td>
+    <td>164.6s</td>
+    <td>35.709007, 139.769757</td>
+    <td>0.9</td>
+    <td><span class="badge">直進</span></td>
+    <td>0.00 / -0.08</td>
+</tr><tr>
+    <td>167</td>
+    <td>12:01:15.095</td>
+    <td>165.6s</td>
+    <td>35.709007, 139.769756</td>
+    <td>0.7</td>
+    <td><span class="badge">直進</span></td>
+    <td>0.00 / 0.00</td>
+</tr><tr>
+    <td>168</td>
+    <td>12:01:16.096</td>
+    <td>166.6s</td>
+    <td>35.709007, 139.769756</td>
+    <td>0.4</td>
+    <td><span class="badge">直進</span></td>
+    <td>0.00 / 0.00</td>
+</tr><tr>
+    <td>169</td>
+    <td>12:01:17.095</td>
+    <td>167.6s</td>
+    <td>35.709006, 139.769759</td>
+    <td>0.2</td>
+    <td><span class="badge">直進</span></td>
+    <td>0.00 / 0.00</td>
+</tr><tr>
+    <td>170</td>
+    <td>12:01:18.097</td>
+    <td>168.6s</td>
+    <td>35.709006, 139.769759</td>
+    <td>0.1</td>
+    <td><span class="badge">直進</span></td>
+    <td>0.00 / 0.00</td>
+</tr><tr>
+    <td>171</td>
+    <td>12:01:19.095</td>
+    <td>169.6s</td>
+    <td>35.709006, 139.769758</td>
+    <td>0.0</td>
+    <td><span class="badge">直進</span></td>
+    <td>0.00 / 0.00</td>
+</tr><tr>
+    <td>172</td>
+    <td>12:01:20.094</td>
+    <td>170.6s</td>
+    <td>35.709006, 139.769758</td>
+    <td>0.0</td>
+    <td><span class="badge">直進</span></td>
+    <td>0.00 / 0.00</td>
+</tr><tr>
+    <td>173</td>
+    <td>12:01:21.090</td>
+    <td>171.6s</td>
+    <td>35.709006, 139.769758</td>
+    <td>0.0</td>
+    <td><span class="badge">直進</span></td>
+    <td>0.00 / 0.00</td>
+</tr><tr>
+    <td>174</td>
+    <td>12:01:22.098</td>
+    <td>172.6s</td>
+    <td>35.709006, 139.769758</td>
+    <td>0.0</td>
+    <td><span class="badge">直進</span></td>
+    <td>0.00 / 0.00</td>
+</tr><tr>
+    <td>175</td>
+    <td>12:01:23.092</td>
+    <td>173.6s</td>
+    <td>35.709006, 139.769758</td>
+    <td>0.0</td>
+    <td><span class="badge">直進</span></td>
+    <td>0.00 / 0.00</td>
+</tr><tr>
+    <td>176</td>
+    <td>12:01:24.095</td>
+    <td>174.6s</td>
+    <td>35.709006, 139.769758</td>
+    <td>0.0</td>
+    <td><span class="badge">直進</span></td>
+    <td>0.00 / 0.00</td>
+</tr><tr>
+    <td>177</td>
+    <td>12:01:25.091</td>
+    <td>175.6s</td>
+    <td>35.709006, 139.769758</td>
+    <td>0.0</td>
+    <td><span class="badge">直進</span></td>
+    <td>0.00 / 0.00</td>
+</tr><tr>
+    <td>178</td>
+    <td>12:01:26.096</td>
+    <td>176.6s</td>
+    <td>35.709006, 139.769758</td>
+    <td>0.0</td>
+    <td><span class="badge">直進</span></td>
+    <td>0.00 / 0.00</td>
+</tr><tr>
+    <td>179</td>
+    <td>12:01:27.095</td>
+    <td>177.6s</td>
+    <td>35.709006, 139.769758</td>
+    <td>0.0</td>
+    <td><span class="badge">直進</span></td>
+    <td>0.00 / 0.00</td>
+</tr><tr>
+    <td>180</td>
+    <td>12:01:28.100</td>
+    <td>178.6s</td>
+    <td>35.709006, 139.769758</td>
+    <td>0.0</td>
+    <td><span class="badge">直進</span></td>
+    <td>0.00 / 0.00</td>
+</tr><tr>
+    <td>181</td>
+    <td>12:01:29.098</td>
+    <td>179.6s</td>
+    <td>35.709006, 139.769758</td>
+    <td>0.0</td>
+    <td><span class="badge">直進</span></td>
+    <td>0.00 / 0.00</td>
+</tr><tr>
+    <td>182</td>
+    <td>12:01:30.098</td>
+    <td>180.6s</td>
+    <td>35.709006, 139.769758</td>
+    <td>0.0</td>
+    <td><span class="badge">直進</span></td>
+    <td>0.00 / 0.00</td>
+</tr><tr>
+    <td>183</td>
+    <td>12:01:31.096</td>
+    <td>181.6s</td>
+    <td>35.709006, 139.769758</td>
+    <td>0.0</td>
+    <td><span class="badge">直進</span></td>
+    <td>0.00 / 0.00</td>
+</tr><tr>
+    <td>184</td>
+    <td>12:01:32.098</td>
+    <td>182.6s</td>
+    <td>35.709006, 139.769758</td>
+    <td>0.0</td>
+    <td><span class="badge">直進</span></td>
+    <td>0.00 / 0.00</td>
+</tr><tr>
+    <td>185</td>
+    <td>12:01:33.096</td>
+    <td>183.6s</td>
+    <td>35.709006, 139.769758</td>
+    <td>0.0</td>
+    <td><span class="badge">直進</span></td>
+    <td>0.00 / 0.00</td>
+</tr><tr>
+    <td>186</td>
+    <td>12:01:34.094</td>
+    <td>184.6s</td>
+    <td>35.709006, 139.769758</td>
+    <td>0.0</td>
+    <td><span class="badge">直進</span></td>
+    <td>0.00 / 0.00</td>
+</tr><tr>
+    <td>187</td>
+    <td>12:01:35.096</td>
+    <td>185.6s</td>
+    <td>35.709006, 139.769758</td>
+    <td>0.0</td>
+    <td><span class="badge">右カーブ</span></td>
+    <td>0.13 / 0.00</td>
+</tr><tr>
+    <td>188</td>
+    <td>12:01:36.095</td>
+    <td>186.6s</td>
+    <td>35.709009, 139.769751</td>
+    <td>0.8</td>
+    <td><span class="badge">加速</span></td>
+    <td>0.00 / -0.99</td>
+</tr><tr>
+    <td>189</td>
+    <td>12:01:37.095</td>
+    <td>187.6s</td>
+    <td>35.709020, 139.769749</td>
+    <td>3.8</td>
+    <td><span class="badge">加速</span></td>
+    <td>0.00 / -0.88</td>
+</tr><tr>
+    <td>190</td>
+    <td>12:01:38.094</td>
+    <td>188.6s</td>
+    <td>35.709050, 139.769750</td>
+    <td>10.6</td>
+    <td><span class="badge">加速</span></td>
+    <td>0.00 / -0.69</td>
+</tr><tr>
+    <td>191</td>
+    <td>12:01:39.103</td>
+    <td>189.6s</td>
+    <td>35.709085, 139.769747</td>
+    <td>14.0</td>
+    <td><span class="badge">加速</span></td>
+    <td>0.22 / -0.75</td>
+</tr><tr>
+    <td>192</td>
+    <td>12:01:40.098</td>
+    <td>190.6s</td>
+    <td>35.709125, 139.769744</td>
+    <td>16.7</td>
+    <td><span class="badge">左カーブ</span></td>
+    <td>-0.72 / -0.07</td>
+</tr><tr>
+    <td>193</td>
+    <td>12:01:41.091</td>
+    <td>191.6s</td>
+    <td>35.709174, 139.769735</td>
+    <td>18.9</td>
+    <td><span class="badge">加速+左</span></td>
+    <td>-0.58 / -0.51</td>
+</tr><tr>
+    <td>194</td>
+    <td>12:01:42.101</td>
+    <td>192.6s</td>
+    <td>35.709223, 139.769708</td>
+    <td>21.1</td>
+    <td><span class="badge">左カーブ</span></td>
+    <td>-0.85 / -0.25</td>
+</tr><tr>
+    <td>195</td>
+    <td>12:01:43.095</td>
+    <td>193.6s</td>
+    <td>35.709278, 139.769668</td>
+    <td>24.2</td>
+    <td><span class="badge">左カーブ</span></td>
+    <td>-0.90 / -0.01</td>
+</tr><tr>
+    <td>196</td>
+    <td>12:01:44.099</td>
+    <td>194.6s</td>
+    <td>35.709335, 139.769660</td>
+    <td>27.4</td>
+    <td><span class="badge">加速+左</span></td>
+    <td>-0.55 / -0.41</td>
+</tr><tr>
+    <td>197</td>
+    <td>12:01:45.095</td>
+    <td>195.6s</td>
+    <td>35.709380, 139.769545</td>
+    <td>29.8</td>
+    <td><span class="badge">加速</span></td>
+    <td>-0.13 / -0.56</td>
+</tr><tr>
+    <td>198</td>
+    <td>12:01:46.102</td>
+    <td>196.6s</td>
+    <td>35.709432, 139.769469</td>
+    <td>32.5</td>
+    <td><span class="badge">加速</span></td>
+    <td>-0.06 / -0.46</td>
+</tr><tr>
+    <td>199</td>
+    <td>12:01:47.098</td>
+    <td>197.6s</td>
+    <td>35.709486, 139.769386</td>
+    <td>34.4</td>
+    <td><span class="badge">加速+右</span></td>
+    <td>0.26 / -0.15</td>
+</tr><tr>
+    <td>200</td>
+    <td>12:01:48.092</td>
+    <td>198.6s</td>
+    <td>35.709545, 139.769301</td>
+    <td>36.4</td>
+    <td><span class="badge">加速+右</span></td>
+    <td>0.19 / -0.43</td>
+</tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+    
+    <script>
+        const routeData = [{"id":0,"state":"加速・右カーブ","name":"加速・右カーブ","color":"#adf226","categories":["acceleration","rightTurn"],"countedCategories":[],"avgSpeed":0.0,"startTime":"11:58:30","endTime":"11:58:30","coords":[[35.709173,139.763759],[35.709164,139.763775]]},{"id":1,"state":"左カーブ","name":"左カーブ","color":"#00d1ff","categories":["leftTurn"],"countedCategories":[],"avgSpeed":0.0,"startTime":"11:58:32","endTime":"11:58:32","coords":[[35.709164,139.763775],[35.709166,139.763776]]},{"id":2,"state":"右カーブ","name":"右カーブ","color":"#ff8c00","categories":["rightTurn"],"countedCategories":[],"avgSpeed":3.5,"startTime":"11:58:32","endTime":"11:58:32","coords":[[35.709166,139.763776],[35.709190,139.763839]]},{"id":3,"state":"減速","name":"減速","color":"#ff2626","categories":["deceleration"],"countedCategories":[],"avgSpeed":7.1,"startTime":"11:58:33","endTime":"11:58:33","coords":[[35.709190,139.763839],[35.709183,139.763872]]},{"id":4,"state":"直進・安定","name":"直進・安定","color":"#eab308","categories":["straight"],"countedCategories":[],"avgSpeed":6.8,"startTime":"11:58:34","endTime":"11:58:34","coords":[[35.709183,139.763872],[35.709180,139.763878]]},{"id":5,"state":"右カーブ","name":"右カーブ","color":"#ff8c00","categories":["rightTurn"],"countedCategories":["rightTurn"],"avgSpeed":6.0,"startTime":"11:58:35","endTime":"11:58:35","coords":[[35.709180,139.763878],[35.709193,139.763866]]},{"id":6,"state":"加速・右カーブ","name":"加速・右カーブ","color":"#adf226","categories":["acceleration","rightTurn"],"countedCategories":["rightTurn"],"avgSpeed":5.6,"startTime":"11:58:36","endTime":"11:58:36","coords":[[35.709193,139.763866],[35.709176,139.763848]]},{"id":7,"state":"右カーブ","name":"右カーブ","color":"#ff8c00","categories":["rightTurn"],"countedCategories":["rightTurn"],"avgSpeed":7.1,"startTime":"11:58:37","endTime":"11:58:37","coords":[[35.709176,139.763848],[35.709151,139.763852]]},{"id":8,"state":"加速","name":"加速","color":"#16e04d","categories":["acceleration"],"countedCategories":[],"avgSpeed":8.5,"startTime":"11:58:38","endTime":"11:58:38","coords":[[35.709151,139.763852],[35.709112,139.763852]]},{"id":9,"state":"右カーブ","name":"右カーブ","color":"#ff8c00","categories":["rightTurn"],"countedCategories":["rightTurn"],"avgSpeed":12.0,"startTime":"11:58:39","endTime":"11:58:40","coords":[[35.709112,139.763852],[35.709067,139.763846],[35.709018,139.763836]]},{"id":10,"state":"直進・安定","name":"直進・安定","color":"#eab308","categories":["straight"],"countedCategories":[],"avgSpeed":17.2,"startTime":"11:58:41","endTime":"11:58:42","coords":[[35.709018,139.763836],[35.708977,139.763818],[35.708930,139.763801]]},{"id":11,"state":"左カーブ","name":"左カーブ","color":"#00d1ff","categories":["leftTurn"],"countedCategories":[],"avgSpeed":18.8,"startTime":"11:58:43","endTime":"11:58:43","coords":[[35.708930,139.763801],[35.708885,139.763787]]},{"id":12,"state":"加速・右カーブ","name":"加速・右カーブ","color":"#adf226","categories":["acceleration","rightTurn"],"countedCategories":[],"avgSpeed":18.7,"startTime":"11:58:44","endTime":"11:58:44","coords":[[35.708885,139.763787],[35.708839,139.763775]]},{"id":13,"state":"直進・安定","name":"直進・安定","color":"#eab308","categories":["straight"],"countedCategories":[],"avgSpeed":19.9,"startTime":"11:58:46","endTime":"11:58:46","coords":[[35.708839,139.763775],[35.708769,139.763765]]},{"id":14,"state":"加速","name":"加速","color":"#16e04d","categories":["acceleration"],"countedCategories":[],"avgSpeed":21.0,"startTime":"11:58:47","endTime":"11:58:47","coords":[[35.708769,139.763765],[35.708716,139.763761]]},{"id":15,"state":"右カーブ","name":"右カーブ","color":"#ff8c00","categories":["rightTurn"],"countedCategories":[],"avgSpeed":21.8,"startTime":"11:58:48","endTime":"11:58:48","coords":[[35.708716,139.763761],[35.708652,139.763764]]},{"id":16,"state":"直進・安定","name":"直進・安定","color":"#eab308","categories":["straight"],"countedCategories":[],"avgSpeed":23.2,"startTime":"11:58:49","endTime":"11:58:50","coords":[[35.708652,139.763764],[35.708588,139.763775],[35.708520,139.763769]]},{"id":17,"state":"右カーブ","name":"右カーブ","color":"#ff8c00","categories":["rightTurn"],"countedCategories":[],"avgSpeed":25.4,"startTime":"11:58:51","endTime":"11:58:51","coords":[[35.708520,139.763769],[35.708455,139.763765]]},{"id":18,"state":"減速・左カーブ","name":"減速・左カーブ","color":"#b340f2","categories":["deceleration","leftTurn"],"countedCategories":[],"avgSpeed":26.5,"startTime":"11:58:52","endTime":"11:58:52","coords":[[35.708455,139.763765],[35.708383,139.763767]]},{"id":19,"state":"減速","name":"減速","color":"#ff2626","categories":["deceleration"],"countedCategories":[],"avgSpeed":26.7,"startTime":"11:58:53","endTime":"11:58:53","coords":[[35.708383,139.763767],[35.708316,139.763770]]},{"id":20,"state":"直進・安定","name":"直進・安定","color":"#eab308","categories":["straight"],"countedCategories":[],"avgSpeed":26.8,"startTime":"11:58:54","endTime":"11:58:54","coords":[[35.708316,139.763770],[35.708247,139.763775]]},{"id":21,"state":"減速","name":"減速","color":"#ff2626","categories":["deceleration"],"countedCategories":["deceleration"],"avgSpeed":27.1,"startTime":"11:58:55","endTime":"11:58:57","coords":[[35.708247,139.763775],[35.708178,139.763780],[35.708109,139.763782],[35.708044,139.763785]]},{"id":22,"state":"加速・左カーブ","name":"加速・左カーブ","color":"#2673ff","categories":["acceleration","leftTurn"],"countedCategories":[],"avgSpeed":26.5,"startTime":"11:58:58","endTime":"11:58:58","coords":[[35.708044,139.763785],[35.707985,139.763783]]},{"id":23,"state":"減速・右カーブ","name":"減速・右カーブ","color":"#fa2ea6","categories":["deceleration","rightTurn"],"countedCategories":["deceleration"],"avgSpeed":24.4,"startTime":"11:58:59","endTime":"11:58:59","coords":[[35.707985,139.763783],[35.707933,139.763787]]},{"id":24,"state":"減速・左カーブ","name":"減速・左カーブ","color":"#b340f2","categories":["deceleration","leftTurn"],"countedCategories":["deceleration"],"avgSpeed":22.9,"startTime":"11:59:00","endTime":"11:59:00","coords":[[35.707933,139.763787],[35.707875,139.763789]]},{"id":25,"state":"減速","name":"減速","color":"#ff2626","categories":["deceleration"],"countedCategories":["deceleration"],"avgSpeed":22.8,"startTime":"11:59:01","endTime":"11:59:01","coords":[[35.707875,139.763789],[35.707820,139.763788]]},{"id":26,"state":"減速・右カーブ","name":"減速・右カーブ","color":"#fa2ea6","categories":["deceleration","rightTurn"],"countedCategories":["deceleration"],"avgSpeed":22.4,"startTime":"11:59:02","endTime":"11:59:02","coords":[[35.707820,139.763788],[35.707767,139.763789]]},{"id":27,"state":"減速","name":"減速","color":"#ff2626","categories":["deceleration"],"countedCategories":["deceleration"],"avgSpeed":19.9,"startTime":"11:59:03","endTime":"11:59:03","coords":[[35.707767,139.763789],[35.707729,139.763790]]},{"id":28,"state":"減速・左カーブ","name":"減速・左カーブ","color":"#b340f2","categories":["deceleration","leftTurn"],"countedCategories":["deceleration"],"avgSpeed":17.6,"startTime":"11:59:04","endTime":"11:59:04","coords":[[35.707729,139.763790],[35.707684,139.763785]]},{"id":29,"state":"減速","name":"減速","color":"#ff2626","categories":["deceleration"],"countedCategories":["deceleration"],"avgSpeed":16.1,"startTime":"11:59:05","endTime":"11:59:05","coords":[[35.707684,139.763785],[35.707661,139.763787]]},{"id":30,"state":"減速・左カーブ","name":"減速・左カーブ","color":"#b340f2","categories":["deceleration","leftTurn"],"countedCategories":["deceleration"],"avgSpeed":12.1,"startTime":"11:59:06","endTime":"11:59:06","coords":[[35.707661,139.763787],[35.707643,139.763782]]},{"id":31,"state":"直進・安定","name":"直進・安定","color":"#eab308","categories":["straight"],"countedCategories":[],"avgSpeed":6.6,"startTime":"11:59:07","endTime":"11:59:09","coords":[[35.707643,139.763782],[35.707623,139.763788],[35.707614,139.763787],[35.707628,139.763800]]},{"id":32,"state":"減速","name":"減速","color":"#ff2626","categories":["deceleration"],"countedCategories":[],"avgSpeed":4.7,"startTime":"11:59:10","endTime":"11:59:10","coords":[[35.707628,139.763800],[35.707620,139.763803]]},{"id":33,"state":"直進・安定","name":"直進・安定","color":"#eab308","categories":["straight"],"countedCategories":[],"avgSpeed":2.9,"startTime":"11:59:11","endTime":"11:59:12","coords":[[35.707620,139.763803],[35.707615,139.763803],[35.707609,139.763804]]},{"id":34,"state":"加速","name":"加速","color":"#16e04d","categories":["acceleration"],"countedCategories":[],"avgSpeed":1.6,"startTime":"11:59:13","endTime":"11:59:13","coords":[[35.707609,139.763804],[35.707606,139.763805]]},{"id":35,"state":"直進・安定","name":"直進・安定","color":"#eab308","categories":["straight"],"countedCategories":[],"avgSpeed":2.6,"startTime":"11:59:14","endTime":"11:59:14","coords":[[35.707606,139.763805],[35.707591,139.763809]]},{"id":36,"state":"左カーブ","name":"左カーブ","color":"#00d1ff","categories":["leftTurn"],"countedCategories":["leftTurn"],"avgSpeed":5.2,"startTime":"11:59:15","endTime":"11:59:15","coords":[[35.707591,139.763809],[35.707575,139.763815]]},{"id":37,"state":"加速・左カーブ","name":"加速・左カーブ","color":"#2673ff","categories":["acceleration","leftTurn"],"countedCategories":["acceleration","leftTurn"],"avgSpeed":6.0,"startTime":"11:59:16","endTime":"11:59:18","coords":[[35.707575,139.763815],[35.707568,139.763821],[35.707555,139.763835],[35.707541,139.763848]]},{"id":38,"state":"加速","name":"加速","color":"#16e04d","categories":["acceleration"],"countedCategories":["acceleration"],"avgSpeed":6.1,"startTime":"11:59:19","endTime":"11:59:19","coords":[[35.707541,139.763848],[35.707535,139.763868]]},{"id":39,"state":"右カーブ","name":"右カーブ","color":"#ff8c00","categories":["rightTurn"],"countedCategories":[],"avgSpeed":8.0,"startTime":"11:59:20","endTime":"11:59:20","coords":[[35.707535,139.763868],[35.707522,139.763914]]},{"id":40,"state":"直進・安定","name":"直進・安定","color":"#eab308","categories":["straight"],"countedCategories":[],"avgSpeed":12.1,"startTime":"11:59:21","endTime":"11:59:21","coords":[[35.707522,139.763914],[35.707516,139.763967]]},{"id":41,"state":"加速","name":"加速","color":"#16e04d","categories":["acceleration"],"countedCategories":["acceleration"],"avgSpeed":16.8,"startTime":"11:59:22","endTime":"11:59:23","coords":[[35.707516,139.763967],[35.707521,139.764029],[35.707512,139.764091]]},{"id":42,"state":"右カーブ","name":"右カーブ","color":"#ff8c00","categories":["rightTurn"],"countedCategories":["rightTurn"],"avgSpeed":19.4,"startTime":"11:59:24","endTime":"11:59:25","coords":[[35.707512,139.764091],[35.707514,139.764145],[35.707507,139.764212]]},{"id":43,"state":"直進・安定","name":"直進・安定","color":"#eab308","categories":["straight"],"countedCategories":[],"avgSpeed":20.6,"startTime":"11:59:26","endTime":"11:59:27","coords":[[35.707507,139.764212],[35.707503,139.764272],[35.707496,139.764338]]},{"id":44,"state":"加速","name":"加速","color":"#16e04d","categories":["acceleration"],"countedCategories":["acceleration"],"avgSpeed":21.6,"startTime":"11:59:28","endTime":"11:59:28","coords":[[35.707496,139.764338],[35.707494,139.764408]]},{"id":45,"state":"加速・右カーブ","name":"加速・右カーブ","color":"#adf226","categories":["acceleration","rightTurn"],"countedCategories":["acceleration"],"avgSpeed":23.2,"startTime":"11:59:29","endTime":"11:59:29","coords":[[35.707494,139.764408],[35.707489,139.764483]]},{"id":46,"state":"直進・安定","name":"直進・安定","color":"#eab308","categories":["straight"],"countedCategories":[],"avgSpeed":26.7,"startTime":"11:59:30","endTime":"11:59:31","coords":[[35.707489,139.764483],[35.707478,139.764570],[35.707472,139.764661]]},{"id":47,"state":"減速","name":"減速","color":"#ff2626","categories":["deceleration"],"countedCategories":["deceleration"],"avgSpeed":29.5,"startTime":"11:59:32","endTime":"11:59:33","coords":[[35.707472,139.764661],[35.707469,139.764755],[35.707463,139.764844]]},{"id":48,"state":"直進・安定","name":"直進・安定","color":"#eab308","categories":["straight"],"countedCategories":[],"avgSpeed":28.9,"startTime":"11:59:34","endTime":"11:59:34","coords":[[35.707463,139.764844],[35.707458,139.764933]]},{"id":49,"state":"加速","name":"加速","color":"#16e04d","categories":["acceleration"],"countedCategories":[],"avgSpeed":28.6,"startTime":"11:59:35","endTime":"11:59:35","coords":[[35.707458,139.764933],[35.707451,139.765022]]},{"id":50,"state":"直進・安定","name":"直進・安定","color":"#eab308","categories":["straight"],"countedCategories":[],"avgSpeed":29.4,"startTime":"11:59:36","endTime":"11:59:37","coords":[[35.707451,139.765022],[35.707440,139.765114],[35.707428,139.765204]]},{"id":51,"state":"左カーブ","name":"左カーブ","color":"#00d1ff","categories":["leftTurn"],"countedCategories":[],"avgSpeed":31.2,"startTime":"11:59:38","endTime":"11:59:39","coords":[[35.707428,139.765204],[35.707419,139.765302],[35.707406,139.765408]]},{"id":52,"state":"直進・安定","name":"直進・安定","color":"#eab308","categories":["straight"],"countedCategories":[],"avgSpeed":33.8,"startTime":"11:59:40","endTime":"11:59:40","coords":[[35.707406,139.765408],[35.707397,139.765518]]},{"id":53,"state":"減速","name":"減速","color":"#ff2626","categories":["deceleration"],"countedCategories":["deceleration"],"avgSpeed":34.1,"startTime":"11:59:41","endTime":"11:59:41","coords":[[35.707397,139.765518],[35.707402,139.765619]]},{"id":54,"state":"減速・左カーブ","name":"減速・左カーブ","color":"#b340f2","categories":["deceleration","leftTurn"],"countedCategories":["deceleration","leftTurn"],"avgSpeed":31.6,"startTime":"11:59:42","endTime":"11:59:43","coords":[[35.707402,139.765619],[35.707399,139.765720],[35.707387,139.765807]]},{"id":55,"state":"左カーブ","name":"左カーブ","color":"#00d1ff","categories":["leftTurn"],"countedCategories":["leftTurn"],"avgSpeed":30.9,"startTime":"11:59:44","endTime":"11:59:46","coords":[[35.707387,139.765807],[35.707398,139.765918],[35.707408,139.766008],[35.707449,139.766098]]},{"id":56,"state":"加速・右カーブ","name":"加速・右カーブ","color":"#adf226","categories":["acceleration","rightTurn"],"countedCategories":[],"avgSpeed":31.5,"startTime":"11:59:47","endTime":"11:59:47","coords":[[35.707449,139.766098],[35.707465,139.766194]]},{"id":57,"state":"直進・安定","name":"直進・安定","color":"#eab308","categories":["straight"],"countedCategories":[],"avgSpeed":33.4,"startTime":"11:59:48","endTime":"11:59:49","coords":[[35.707465,139.766194],[35.707489,139.766296],[35.707512,139.766405]]},{"id":58,"state":"減速","name":"減速","color":"#ff2626","categories":["deceleration"],"countedCategories":[],"avgSpeed":35.9,"startTime":"11:59:50","endTime":"11:59:50","coords":[[35.707512,139.766405],[35.707543,139.766510]]},{"id":59,"state":"左カーブ","name":"左カーブ","color":"#00d1ff","categories":["leftTurn"],"countedCategories":["leftTurn"],"avgSpeed":36.2,"startTime":"11:59:51","endTime":"11:59:51","coords":[[35.707543,139.766510],[35.707569,139.766617]]},{"id":60,"state":"減速・左カーブ","name":"減速・左カーブ","color":"#b340f2","categories":["deceleration","leftTurn"],"countedCategories":["leftTurn"],"avgSpeed":35.7,"startTime":"11:59:52","endTime":"11:59:52","coords":[[35.707569,139.766617],[35.707595,139.766720]]},{"id":61,"state":"加速・左カーブ","name":"加速・左カーブ","color":"#2673ff","categories":["acceleration","leftTurn"],"countedCategories":["leftTurn"],"avgSpeed":35.5,"startTime":"11:59:53","endTime":"11:59:53","coords":[[35.707595,139.766720],[35.707637,139.766818]]},{"id":62,"state":"左カーブ","name":"左カーブ","color":"#00d1ff","categories":["leftTurn"],"countedCategories":["leftTurn"],"avgSpeed":35.6,"startTime":"11:59:54","endTime":"11:59:54","coords":[[35.707637,139.766818],[35.707677,139.766914]]},{"id":63,"state":"直進・安定","name":"直進・安定","color":"#eab308","categories":["straight"],"countedCategories":[],"avgSpeed":36.0,"startTime":"11:59:55","endTime":"11:59:55","coords":[[35.707677,139.766914],[35.707725,139.767012]]},{"id":64,"state":"左カーブ","name":"左カーブ","color":"#00d1ff","categories":["leftTurn"],"countedCategories":[],"avgSpeed":37.7,"startTime":"11:59:56","endTime":"11:59:56","coords":[[35.707725,139.767012],[35.707774,139.767117]]},{"id":65,"state":"直進・安定","name":"直進・安定","color":"#eab308","categories":["straight"],"countedCategories":[],"avgSpeed":40.2,"startTime":"11:59:57","endTime":"11:59:59","coords":[[35.707774,139.767117],[35.707827,139.767221],[35.707881,139.767328],[35.707936,139.767437]]},{"id":66,"state":"減速・右カーブ","name":"減速・右カーブ","color":"#fa2ea6","categories":["deceleration","rightTurn"],"countedCategories":["deceleration","rightTurn"],"avgSpeed":42.3,"startTime":"12:00:00","endTime":"12:00:01","coords":[[35.707936,139.767437],[35.707997,139.767545],[35.708058,139.767652]]},{"id":67,"state":"右カーブ","name":"右カーブ","color":"#ff8c00","categories":["rightTurn"],"countedCategories":["rightTurn"],"avgSpeed":42.4,"startTime":"12:00:02","endTime":"12:00:07","coords":[[35.708058,139.767652],[35.708117,139.767764],[35.708177,139.767871],[35.708231,139.767984],[35.708281,139.768098],[35.708321,139.768219],[35.708353,139.768344]]},{"id":68,"state":"減速・右カーブ","name":"減速・右カーブ","color":"#fa2ea6","categories":["deceleration","rightTurn"],"countedCategories":["rightTurn"],"avgSpeed":41.1,"startTime":"12:00:08","endTime":"12:00:08","coords":[[35.708353,139.768344],[35.708371,139.768464]]},{"id":69,"state":"右カーブ","name":"右カーブ","color":"#ff8c00","categories":["rightTurn"],"countedCategories":["rightTurn"],"avgSpeed":39.0,"startTime":"12:00:09","endTime":"12:00:09","coords":[[35.708371,139.768464],[35.708379,139.768581]]},{"id":70,"state":"減速","name":"減速","color":"#ff2626","categories":["deceleration"],"countedCategories":["deceleration"],"avgSpeed":35.4,"startTime":"12:00:10","endTime":"12:00:12","coords":[[35.708379,139.768581],[35.708385,139.768692],[35.708392,139.768797],[35.708401,139.768894]]},{"id":71,"state":"右カーブ","name":"右カーブ","color":"#ff8c00","categories":["rightTurn"],"countedCategories":["rightTurn"],"avgSpeed":30.9,"startTime":"12:00:13","endTime":"12:00:14","coords":[[35.708401,139.768894],[35.708414,139.768984],[35.708427,139.769074]]},{"id":72,"state":"減速・右カーブ","name":"減速・右カーブ","color":"#fa2ea6","categories":["deceleration","rightTurn"],"countedCategories":["rightTurn"],"avgSpeed":29.5,"startTime":"12:00:15","endTime":"12:00:15","coords":[[35.708427,139.769074],[35.708417,139.769160]]},{"id":73,"state":"右カーブ","name":"右カーブ","color":"#ff8c00","categories":["rightTurn"],"countedCategories":["rightTurn"],"avgSpeed":28.9,"startTime":"12:00:16","endTime":"12:00:16","coords":[[35.708417,139.769160],[35.708410,139.769247]]},{"id":74,"state":"減速・右カーブ","name":"減速・右カーブ","color":"#fa2ea6","categories":["deceleration","rightTurn"],"countedCategories":["deceleration","rightTurn"],"avgSpeed":27.9,"startTime":"12:00:17","endTime":"12:00:17","coords":[[35.708410,139.769247],[35.708403,139.769330]]},{"id":75,"state":"減速","name":"減速","color":"#ff2626","categories":["deceleration"],"countedCategories":["deceleration"],"avgSpeed":17.6,"startTime":"12:00:18","endTime":"12:00:22","coords":[[35.708403,139.769330],[35.708388,139.769403],[35.708385,139.769465],[35.708383,139.769513],[35.708381,139.769545],[35.708380,139.769562]]},{"id":76,"state":"直進・安定","name":"直進・安定","color":"#eab308","categories":["straight"],"countedCategories":[],"avgSpeed":2.9,"startTime":"12:00:23","endTime":"12:00:26","coords":[[35.708380,139.769562],[35.708379,139.769575],[35.708379,139.769583],[35.708379,139.769588],[35.708379,139.769589]]},{"id":77,"state":"加速","name":"加速","color":"#16e04d","categories":["acceleration"],"countedCategories":["acceleration"],"avgSpeed":0.4,"startTime":"12:00:27","endTime":"12:00:28","coords":[[35.708379,139.769589],[35.708379,139.769590],[35.708378,139.769592]]},{"id":78,"state":"加速・左カーブ","name":"加速・左カーブ","color":"#2673ff","categories":["acceleration","leftTurn"],"countedCategories":["acceleration"],"avgSpeed":2.0,"startTime":"12:00:29","endTime":"12:00:29","coords":[[35.708378,139.769592],[35.708378,139.769603]]},{"id":79,"state":"左カーブ","name":"左カーブ","color":"#00d1ff","categories":["leftTurn"],"countedCategories":[],"avgSpeed":4.3,"startTime":"12:00:30","endTime":"12:00:30","coords":[[35.708378,139.769603],[35.708377,139.769619]]},{"id":80,"state":"直進・安定","name":"直進・安定","color":"#eab308","categories":["straight"],"countedCategories":[],"avgSpeed":6.4,"startTime":"12:00:31","endTime":"12:00:32","coords":[[35.708377,139.769619],[35.708376,139.769640],[35.708375,139.769662]]},{"id":81,"state":"減速","name":"減速","color":"#ff2626","categories":["deceleration"],"countedCategories":[],"avgSpeed":7.0,"startTime":"12:00:33","endTime":"12:00:33","coords":[[35.708375,139.769662],[35.708374,139.769684]]},{"id":82,"state":"直進・安定","name":"直進・安定","color":"#eab308","categories":["straight"],"countedCategories":[],"avgSpeed":1.0,"startTime":"12:00:34","endTime":"12:00:49","coords":[[35.708374,139.769684],[35.708373,139.769695],[35.708372,139.769705],[35.708372,139.769709],[35.708372,139.769709],[35.708372,139.769708],[35.708372,139.769709],[35.708372,139.769708],[35.708372,139.769708],[35.708372,139.769708],[35.708372,139.769708],[35.708372,139.769708],[35.708372,139.769708],[35.708372,139.769708],[35.708372,139.769708],[35.708372,139.769708],[35.708372,139.769708]]},{"id":83,"state":"加速","name":"加速","color":"#16e04d","categories":["acceleration"],"countedCategories":[],"avgSpeed":0.0,"startTime":"12:00:50","endTime":"12:00:50","coords":[[35.708372,139.769708],[35.708372,139.769708]]},{"id":84,"state":"加速・左カーブ","name":"加速・左カーブ","color":"#2673ff","categories":["acceleration","leftTurn"],"countedCategories":[],"avgSpeed":0.8,"startTime":"12:00:51","endTime":"12:00:51","coords":[[35.708372,139.769708],[35.708372,139.769713]]},{"id":85,"state":"直進・安定","name":"直進・安定","color":"#eab308","categories":["straight"],"countedCategories":[],"avgSpeed":3.3,"startTime":"12:00:52","endTime":"12:00:52","coords":[[35.708372,139.769713],[35.708371,139.769731]]},{"id":86,"state":"左カーブ","name":"左カーブ","color":"#00d1ff","categories":["leftTurn"],"countedCategories":["leftTurn"],"avgSpeed":5.9,"startTime":"12:00:53","endTime":"12:00:55","coords":[[35.708371,139.769731],[35.708370,139.769749],[35.708369,139.769765],[35.708368,139.769787]]},{"id":87,"state":"加速・左カーブ","name":"加速・左カーブ","color":"#2673ff","categories":["acceleration","leftTurn"],"countedCategories":["leftTurn"],"avgSpeed":8.8,"startTime":"12:00:56","endTime":"12:00:56","coords":[[35.708368,139.769787],[35.708367,139.769806]]},{"id":88,"state":"左カーブ","name":"左カーブ","color":"#00d1ff","categories":["leftTurn"],"countedCategories":["leftTurn"],"avgSpeed":13.9,"startTime":"12:00:57","endTime":"12:00:59","coords":[[35.708367,139.769806],[35.708376,139.769823],[35.708497,139.769846],[35.708530,139.769852]]},{"id":89,"state":"直進・安定","name":"直進・安定","color":"#eab308","categories":["straight"],"countedCategories":[],"avgSpeed":15.0,"startTime":"12:01:00","endTime":"12:01:00","coords":[[35.708530,139.769852],[35.708578,139.769840]]},{"id":90,"state":"減速","name":"減速","color":"#ff2626","categories":["deceleration"],"countedCategories":[],"avgSpeed":23.0,"startTime":"12:01:01","endTime":"12:01:02","coords":[[35.708578,139.769840],[35.708674,139.769820],[35.708743,139.769814]]},{"id":91,"state":"右カーブ","name":"右カーブ","color":"#ff8c00","categories":["rightTurn"],"countedCategories":["rightTurn"],"avgSpeed":22.5,"startTime":"12:01:03","endTime":"12:01:04","coords":[[35.708743,139.769814],[35.708786,139.769794],[35.708833,139.769784]]},{"id":92,"state":"減速","name":"減速","color":"#ff2626","categories":["deceleration"],"countedCategories":["deceleration"],"avgSpeed":19.0,"startTime":"12:01:05","endTime":"12:01:05","coords":[[35.708833,139.769784],[35.708882,139.769770]]},{"id":93,"state":"減速・右カーブ","name":"減速・右カーブ","color":"#fa2ea6","categories":["deceleration","rightTurn"],"countedCategories":["deceleration"],"avgSpeed":18.2,"startTime":"12:01:06","endTime":"12:01:06","coords":[[35.708882,139.769770],[35.708925,139.769766]]},{"id":94,"state":"減速","name":"減速","color":"#ff2626","categories":["deceleration"],"countedCategories":["deceleration"],"avgSpeed":15.8,"startTime":"12:01:07","endTime":"12:01:07","coords":[[35.708925,139.769766],[35.708958,139.769761]]},{"id":95,"state":"減速・右カーブ","name":"減速・右カーブ","color":"#fa2ea6","categories":["deceleration","rightTurn"],"countedCategories":["deceleration","rightTurn"],"avgSpeed":10.6,"startTime":"12:01:08","endTime":"12:01:09","coords":[[35.708958,139.769761],[35.708985,139.769756],[35.709000,139.769757]]},{"id":96,"state":"減速","name":"減速","color":"#ff2626","categories":["deceleration"],"countedCategories":["deceleration"],"avgSpeed":4.4,"startTime":"12:01:10","endTime":"12:01:10","coords":[[35.709000,139.769757],[35.709004,139.769756]]},{"id":97,"state":"直進・安定","name":"直進・安定","color":"#eab308","categories":["straight"],"countedCategories":[],"avgSpeed":0.2,"startTime":"12:01:11","endTime":"12:01:34","coords":[[35.709004,139.769756],[35.709003,139.769755],[35.709006,139.769755],[35.709005,139.769760],[35.709007,139.769757],[35.709007,139.769756],[35.709007,139.769756],[35.709006,139.769759],[35.709006,139.769759],[35.709006,139.769758],[35.709006,139.769758],[35.709006,139.769758],[35.709006,139.769758],[35.709006,139.769758],[35.709006,139.769758],[35.709006,139.769758],[35.709006,139.769758],[35.709006,139.769758],[35.709006,139.769758],[35.709006,139.769758],[35.709006,139.769758],[35.709006,139.769758],[35.709006,139.769758],[35.709006,139.769758],[35.709006,139.769758]]},{"id":98,"state":"右カーブ","name":"右カーブ","color":"#ff8c00","categories":["rightTurn"],"countedCategories":[],"avgSpeed":0.0,"startTime":"12:01:35","endTime":"12:01:35","coords":[[35.709006,139.769758],[35.709006,139.769758]]},{"id":99,"state":"加速","name":"加速","color":"#16e04d","categories":["acceleration"],"countedCategories":["acceleration"],"avgSpeed":5.8,"startTime":"12:01:36","endTime":"12:01:39","coords":[[35.709006,139.769758],[35.709009,139.769751],[35.709020,139.769749],[35.709050,139.769750],[35.709085,139.769747]]},{"id":100,"state":"左カーブ","name":"左カーブ","color":"#00d1ff","categories":["leftTurn"],"countedCategories":["leftTurn"],"avgSpeed":15.3,"startTime":"12:01:40","endTime":"12:01:40","coords":[[35.709085,139.769747],[35.709125,139.769744]]},{"id":101,"state":"加速・左カーブ","name":"加速・左カーブ","color":"#2673ff","categories":["acceleration","leftTurn"],"countedCategories":["leftTurn"],"avgSpeed":17.8,"startTime":"12:01:41","endTime":"12:01:41","coords":[[35.709125,139.769744],[35.709174,139.769735]]},{"id":102,"state":"左カーブ","name":"左カーブ","color":"#00d1ff","categories":["leftTurn"],"countedCategories":["leftTurn"],"avgSpeed":21.4,"startTime":"12:01:42","endTime":"12:01:43","coords":[[35.709174,139.769735],[35.709223,139.769708],[35.709278,139.769668]]},{"id":103,"state":"加速・左カーブ","name":"加速・左カーブ","color":"#2673ff","categories":["acceleration","leftTurn"],"countedCategories":["acceleration","leftTurn"],"avgSpeed":25.8,"startTime":"12:01:44","endTime":"12:01:44","coords":[[35.709278,139.769668],[35.709335,139.769660]]},{"id":104,"state":"加速","name":"加速","color":"#16e04d","categories":["acceleration"],"countedCategories":["acceleration"],"avgSpeed":29.9,"startTime":"12:01:45","endTime":"12:01:46","coords":[[35.709335,139.769660],[35.709380,139.769545],[35.709432,139.769469]]},{"id":105,"state":"加速・右カーブ","name":"加速・右カーブ","color":"#adf226","categories":["acceleration","rightTurn"],"countedCategories":["acceleration","rightTurn"],"avgSpeed":35.4,"startTime":"12:01:47","endTime":"12:01:49","coords":[[35.709432,139.769469],[35.709486,139.769386],[35.709545,139.769301],[35.709610,139.769215]]},{"id":106,"state":"右カーブ","name":"右カーブ","color":"#ff8c00","categories":["rightTurn"],"countedCategories":["rightTurn"],"avgSpeed":39.2,"startTime":"12:01:50","endTime":"12:01:55","coords":[[35.709610,139.769215],[35.709677,139.769130],[35.709750,139.769046],[35.709827,139.768973],[35.709911,139.768916],[35.710000,139.768867],[35.710097,139.768830]]},{"id":107,"state":"加速・右カーブ","name":"加速・右カーブ","color":"#adf226","categories":["acceleration","rightTurn"],"countedCategories":["rightTurn"],"avgSpeed":41.7,"startTime":"12:01:56","endTime":"12:01:57","coords":[[35.710097,139.768830],[35.710198,139.768798],[35.710304,139.768768]]},{"id":108,"state":"右カーブ","name":"右カーブ","color":"#ff8c00","categories":["rightTurn"],"countedCategories":["rightTurn"],"avgSpeed":43.6,"startTime":"12:01:58","endTime":"12:01:58","coords":[[35.710304,139.768768],[35.710413,139.768744]]},{"id":109,"state":"加速・右カーブ","name":"加速・右カーブ","color":"#adf226","categories":["acceleration","rightTurn"],"countedCategories":["acceleration","rightTurn"],"avgSpeed":45.1,"startTime":"12:01:59","endTime":"12:01:59","coords":[[35.710413,139.768744],[35.710527,139.768727]]},{"id":110,"state":"加速・左カーブ","name":"加速・左カーブ","color":"#2673ff","categories":["acceleration","leftTurn"],"countedCategories":["acceleration"],"avgSpeed":46.8,"startTime":"12:02:00","endTime":"12:02:00","coords":[[35.710527,139.768727],[35.710646,139.768712]]},{"id":111,"state":"加速","name":"加速","color":"#16e04d","categories":["acceleration"],"countedCategories":["acceleration"],"avgSpeed":48.2,"startTime":"12:02:01","endTime":"12:02:01","coords":[[35.710646,139.768712],[35.710767,139.768699]]},{"id":112,"state":"右カーブ","name":"右カーブ","color":"#ff8c00","categories":["rightTurn"],"countedCategories":[],"avgSpeed":49.7,"startTime":"12:02:02","endTime":"12:02:02","coords":[[35.710767,139.768699],[35.710893,139.768682]]},{"id":113,"state":"直進・安定","name":"直進・安定","color":"#eab308","categories":["straight"],"countedCategories":[],"avgSpeed":51.2,"startTime":"12:02:03","endTime":"12:02:03","coords":[[35.710893,139.768682],[35.711022,139.768667]]},{"id":114,"state":"減速・右カーブ","name":"減速・右カーブ","color":"#fa2ea6","categories":["deceleration","rightTurn"],"countedCategories":["deceleration"],"avgSpeed":52.0,"startTime":"12:02:04","endTime":"12:02:04","coords":[[35.711022,139.768667],[35.711152,139.768658]]},{"id":115,"state":"減速","name":"減速","color":"#ff2626","categories":["deceleration"],"countedCategories":["deceleration"],"avgSpeed":50.9,"startTime":"12:02:05","endTime":"12:02:06","coords":[[35.711152,139.768658],[35.711280,139.768651],[35.711403,139.768644]]},{"id":116,"state":"減速・左カーブ","name":"減速・左カーブ","color":"#b340f2","categories":["deceleration","leftTurn"],"countedCategories":["deceleration"],"avgSpeed":48.8,"startTime":"12:02:07","endTime":"12:02:07","coords":[[35.711403,139.768644],[35.711523,139.768635]]},{"id":117,"state":"減速","name":"減速","color":"#ff2626","categories":["deceleration"],"countedCategories":["deceleration"],"avgSpeed":30.0,"startTime":"12:02:08","endTime":"12:02:17","coords":[[35.711523,139.768635],[35.711638,139.768619],[35.711752,139.768597],[35.711859,139.768579],[35.711951,139.768564],[35.712030,139.768548],[35.712094,139.768537],[35.712145,139.768528],[35.712182,139.768520],[35.712208,139.768515],[35.712222,139.768512]]},{"id":118,"state":"直進・安定","name":"直進・安定","color":"#eab308","categories":["straight"],"countedCategories":[],"avgSpeed":0.4,"startTime":"12:02:18","endTime":"12:02:45","coords":[[35.712222,139.768512],[35.712231,139.768511],[35.712232,139.768512],[35.712232,139.768513],[35.712233,139.768513],[35.712233,139.768514],[35.712234,139.768514],[35.712234,139.768515],[35.712234,139.768515],[35.712234,139.768515],[35.712234,139.768515],[35.712234,139.768515],[35.712234,139.768515],[35.712234,139.768515],[35.712234,139.768515],[35.712234,139.768515],[35.712234,139.768515],[35.712234,139.768515],[35.712234,139.768515],[35.712234,139.768515],[35.712234,139.768515],[35.712234,139.768515],[35.712234,139.768515],[35.712234,139.768515],[35.712234,139.768515],[35.712234,139.768515],[35.712234,139.768515],[35.712234,139.768515],[35.712234,139.768515]]},{"id":119,"state":"加速","name":"加速","color":"#16e04d","categories":["acceleration"],"countedCategories":["acceleration"],"avgSpeed":17.7,"startTime":"12:02:46","endTime":"12:02:56","coords":[[35.712234,139.768515],[35.712234,139.768515],[35.712244,139.768525],[35.712263,139.768522],[35.712296,139.768517],[35.712339,139.768509],[35.712391,139.768500],[35.712452,139.768489],[35.712521,139.768475],[35.712597,139.768460],[35.712680,139.768442],[35.712768,139.768418]]},{"id":120,"state":"加速・左カーブ","name":"加速・左カーブ","color":"#2673ff","categories":["acceleration","leftTurn"],"countedCategories":["acceleration"],"avgSpeed":37.7,"startTime":"12:02:57","endTime":"12:02:57","coords":[[35.712768,139.768418],[35.712863,139.768387]]},{"id":121,"state":"加速","name":"加速","color":"#16e04d","categories":["acceleration"],"countedCategories":["acceleration"],"avgSpeed":39.7,"startTime":"12:02:58","endTime":"12:02:58","coords":[[35.712863,139.768387],[35.712959,139.768357]]},{"id":122,"state":"右カーブ","name":"右カーブ","color":"#ff8c00","categories":["rightTurn"],"countedCategories":[],"avgSpeed":41.5,"startTime":"12:02:59","endTime":"12:02:59","coords":[[35.712959,139.768357],[35.713064,139.768322]]},{"id":123,"state":"直進・安定","name":"直進・安定","color":"#eab308","categories":["straight"],"countedCategories":[],"avgSpeed":42.8,"startTime":"12:03:00","endTime":"12:03:00","coords":[[35.713064,139.768322],[35.713167,139.768286]]},{"id":124,"state":"減速","name":"減速","color":"#ff2626","categories":["deceleration"],"countedCategories":[],"avgSpeed":42.8,"startTime":"12:03:01","endTime":"12:03:01","coords":[[35.713167,139.768286],[35.713271,139.768251]]},{"id":125,"state":"右カーブ","name":"右カーブ","color":"#ff8c00","categories":["rightTurn"],"countedCategories":[],"avgSpeed":42.0,"startTime":"12:03:02","endTime":"12:03:02","coords":[[35.713271,139.768251],[35.713371,139.768219]]},{"id":126,"state":"直進・安定","name":"直進・安定","color":"#eab308","categories":["straight"],"countedCategories":[],"avgSpeed":41.0,"startTime":"12:03:03","endTime":"12:03:03","coords":[[35.713371,139.768219],[35.713469,139.768188]]},{"id":127,"state":"減速・右カーブ","name":"減速・右カーブ","color":"#fa2ea6","categories":["deceleration","rightTurn"],"countedCategories":["deceleration"],"avgSpeed":40.3,"startTime":"12:03:04","endTime":"12:03:04","coords":[[35.713469,139.768188],[35.713566,139.768157]]},{"id":128,"state":"減速","name":"減速","color":"#ff2626","categories":["deceleration"],"countedCategories":["deceleration"],"avgSpeed":22.6,"startTime":"12:03:05","endTime":"12:03:15","coords":[[35.713566,139.768157],[35.713659,139.768125],[35.713745,139.768093],[35.713822,139.768061],[35.713894,139.768032],[35.713952,139.768013],[35.713998,139.767997],[35.714034,139.767985],[35.714064,139.767974],[35.714091,139.767966],[35.714111,139.767959],[35.714127,139.767954]]},{"id":129,"state":"直進・安定","name":"直進・安定","color":"#eab308","categories":["straight"],"countedCategories":[],"avgSpeed":0.6,"startTime":"12:03:16","endTime":"12:03:36","coords":[[35.714127,139.767954],[35.714137,139.767951],[35.714141,139.767948],[35.714141,139.767946],[35.714142,139.767947],[35.714143,139.767947],[35.714143,139.767948],[35.714143,139.767948],[35.714142,139.767948],[35.714142,139.767948],[35.714142,139.767948],[35.714142,139.767948],[35.714142,139.767948],[35.714142,139.767948],[35.714142,139.767948],[35.714142,139.767948],[35.714142,139.767948],[35.714142,139.767948],[35.714142,139.767948],[35.714142,139.767948],[35.714142,139.767948],[35.714142,139.767948]]},{"id":130,"state":"加速","name":"加速","color":"#16e04d","categories":["acceleration"],"countedCategories":["acceleration"],"avgSpeed":8.6,"startTime":"12:03:37","endTime":"12:03:43","coords":[[35.714142,139.767948],[35.714142,139.767948],[35.714148,139.767948],[35.714165,139.767944],[35.714186,139.767935],[35.714219,139.767923],[35.714260,139.767909],[35.714309,139.767893]]},{"id":131,"state":"直進・安定","name":"直進・安定","color":"#eab308","categories":["straight"],"countedCategories":[],"avgSpeed":21.5,"startTime":"12:03:44","endTime":"12:03:44","coords":[[35.714309,139.767893],[35.714363,139.767873]]},{"id":132,"state":"左カーブ","name":"左カーブ","color":"#00d1ff","categories":["leftTurn"],"countedCategories":[],"avgSpeed":23.9,"startTime":"12:03:45","endTime":"12:03:45","coords":[[35.714363,139.767873],[35.714422,139.767849]]},{"id":133,"state":"右カーブ","name":"右カーブ","color":"#ff8c00","categories":["rightTurn"],"countedCategories":[],"avgSpeed":25.1,"startTime":"12:03:46","endTime":"12:03:46","coords":[[35.714422,139.767849],[35.714480,139.767821]]},{"id":134,"state":"左カーブ","name":"左カーブ","color":"#00d1ff","categories":["leftTurn"],"countedCategories":[],"avgSpeed":24.9,"startTime":"12:03:47","endTime":"12:03:47","coords":[[35.714480,139.767821],[35.714536,139.767791]]},{"id":135,"state":"直進・安定","name":"直進・安定","color":"#eab308","categories":["straight"],"countedCategories":[],"avgSpeed":25.2,"startTime":"12:03:48","endTime":"12:03:48","coords":[[35.714536,139.767791],[35.714596,139.767761]]},{"id":136,"state":"加速・左カーブ","name":"加速・左カーブ","color":"#2673ff","categories":["acceleration","leftTurn"],"countedCategories":["acceleration"],"avgSpeed":26.5,"startTime":"12:03:49","endTime":"12:03:49","coords":[[35.714596,139.767761],[35.714657,139.767726]]},{"id":137,"state":"加速","name":"加速","color":"#16e04d","categories":["acceleration"],"countedCategories":["acceleration"],"avgSpeed":29.6,"startTime":"12:03:50","endTime":"12:03:51","coords":[[35.714657,139.767726],[35.714721,139.767685],[35.714794,139.767641]]},{"id":138,"state":"直進・安定","name":"直進・安定","color":"#eab308","categories":["straight"],"countedCategories":[],"avgSpeed":34.2,"startTime":"12:03:52","endTime":"12:03:54","coords":[[35.714794,139.767641],[35.714868,139.767592],[35.714945,139.767541],[35.715023,139.767489]]},{"id":139,"state":"加速・左カーブ","name":"加速・左カーブ","color":"#2673ff","categories":["acceleration","leftTurn"],"countedCategories":[],"avgSpeed":36.5,"startTime":"12:03:55","endTime":"12:03:55","coords":[[35.715023,139.767489],[35.715105,139.767433]]},{"id":140,"state":"直進・安定","name":"直進・安定","color":"#eab308","categories":["straight"],"countedCategories":[],"avgSpeed":40.0,"startTime":"12:03:56","endTime":"12:03:58","coords":[[35.715105,139.767433],[35.715191,139.767372],[35.715283,139.767312],[35.715376,139.767253]]},{"id":141,"state":"右カーブ","name":"右カーブ","color":"#ff8c00","categories":["rightTurn"],"countedCategories":[],"avgSpeed":42.2,"startTime":"12:03:59","endTime":"12:03:59","coords":[[35.715376,139.767253],[35.715470,139.767191]]},{"id":142,"state":"左カーブ","name":"左カーブ","color":"#00d1ff","categories":["leftTurn"],"countedCategories":[],"avgSpeed":43.2,"startTime":"12:04:00","endTime":"12:04:00","coords":[[35.715470,139.767191],[35.715568,139.767131]]},{"id":143,"state":"直進・安定","name":"直進・安定","color":"#eab308","categories":["straight"],"countedCategories":[],"avgSpeed":44.4,"startTime":"12:04:01","endTime":"12:04:01","coords":[[35.715568,139.767131],[35.715669,139.767067]]},{"id":144,"state":"右カーブ","name":"右カーブ","color":"#ff8c00","categories":["rightTurn"],"countedCategories":[],"avgSpeed":45.8,"startTime":"12:04:02","endTime":"12:04:02","coords":[[35.715669,139.767067],[35.715772,139.767001]]},{"id":145,"state":"直進・安定","name":"直進・安定","color":"#eab308","categories":["straight"],"countedCategories":[],"avgSpeed":46.8,"startTime":"12:04:03","endTime":"12:04:04","coords":[[35.715772,139.767001],[35.715876,139.766934],[35.715979,139.766865]]},{"id":146,"state":"減速・右カーブ","name":"減速・右カーブ","color":"#fa2ea6","categories":["deceleration","rightTurn"],"countedCategories":[],"avgSpeed":47.1,"startTime":"12:04:05","endTime":"12:04:05","coords":[[35.715979,139.766865],[35.716082,139.766795]]},{"id":147,"state":"直進・安定","name":"直進・安定","color":"#eab308","categories":["straight"],"countedCategories":[],"avgSpeed":47.1,"startTime":"12:04:06","endTime":"12:04:06","coords":[[35.716082,139.766795],[35.716185,139.766725]]},{"id":148,"state":"減速・右カーブ","name":"減速・右カーブ","color":"#fa2ea6","categories":["deceleration","rightTurn"],"countedCategories":["deceleration"],"avgSpeed":46.6,"startTime":"12:04:07","endTime":"12:04:07","coords":[[35.716185,139.766725],[35.716287,139.766656]]},{"id":149,"state":"減速","name":"減速","color":"#ff2626","categories":["deceleration"],"countedCategories":["deceleration"],"avgSpeed":45.3,"startTime":"12:04:08","endTime":"12:04:08","coords":[[35.716287,139.766656],[35.716385,139.766589]]},{"id":150,"state":"減速・右カーブ","name":"減速・右カーブ","color":"#fa2ea6","categories":["deceleration","rightTurn"],"countedCategories":["deceleration"],"avgSpeed":43.7,"startTime":"12:04:09","endTime":"12:04:09","coords":[[35.716385,139.766589],[35.716479,139.766524]]},{"id":151,"state":"減速・左カーブ","name":"減速・左カーブ","color":"#b340f2","categories":["deceleration","leftTurn"],"countedCategories":["deceleration","leftTurn"],"avgSpeed":42.0,"startTime":"12:04:10","endTime":"12:04:12","coords":[[35.716479,139.766524],[35.716570,139.766459],[35.716654,139.766388],[35.716737,139.766314]]},{"id":152,"state":"左カーブ","name":"左カーブ","color":"#00d1ff","categories":["leftTurn"],"countedCategories":["leftTurn"],"avgSpeed":41.0,"startTime":"12:04:13","endTime":"12:04:13","coords":[[35.716737,139.766314],[35.716814,139.766236]]},{"id":153,"state":"右カーブ","name":"右カーブ","color":"#ff8c00","categories":["rightTurn"],"countedCategories":[],"avgSpeed":40.7,"startTime":"12:04:14","endTime":"12:04:15","coords":[[35.716814,139.766236],[35.716895,139.766159],[35.716974,139.766080]]},{"id":154,"state":"減速","name":"減速","color":"#ff2626","categories":["deceleration"],"countedCategories":[],"avgSpeed":41.0,"startTime":"12:04:16","endTime":"12:04:16","coords":[[35.716974,139.766080],[35.717053,139.765998]]},{"id":155,"state":"直進・安定","name":"直進・安定","color":"#eab308","categories":["straight"],"countedCategories":[],"avgSpeed":41.2,"startTime":"12:04:17","endTime":"12:04:17","coords":[[35.717053,139.765998],[35.717135,139.765919]]},{"id":156,"state":"減速","name":"減速","color":"#ff2626","categories":["deceleration"],"countedCategories":[],"avgSpeed":41.7,"startTime":"12:04:18","endTime":"12:04:18","coords":[[35.717135,139.765919],[35.717217,139.765834]]},{"id":157,"state":"減速・右カーブ","name":"減速・右カーブ","color":"#fa2ea6","categories":["deceleration","rightTurn"],"countedCategories":["rightTurn"],"avgSpeed":41.7,"startTime":"12:04:19","endTime":"12:04:19","coords":[[35.717217,139.765834],[35.717292,139.765752]]},{"id":158,"state":"右カーブ","name":"右カーブ","color":"#ff8c00","categories":["rightTurn"],"countedCategories":["rightTurn"],"avgSpeed":40.0,"startTime":"12:04:20","endTime":"12:04:20","coords":[[35.717292,139.765752],[35.717359,139.765664]]},{"id":159,"state":"減速","name":"減速","color":"#ff2626","categories":["deceleration"],"countedCategories":["deceleration"],"avgSpeed":38.0,"startTime":"12:04:21","endTime":"12:04:21","coords":[[35.717359,139.765664],[35.717426,139.765584]]},{"id":160,"state":"減速・左カーブ","name":"減速・左カーブ","color":"#b340f2","categories":["deceleration","leftTurn"],"countedCategories":["deceleration"],"avgSpeed":36.4,"startTime":"12:04:22","endTime":"12:04:22","coords":[[35.717426,139.765584],[35.717492,139.765507]]},{"id":161,"state":"右カーブ","name":"右カーブ","color":"#ff8c00","categories":["rightTurn"],"countedCategories":["rightTurn"],"avgSpeed":34.9,"startTime":"12:04:23","endTime":"12:04:23","coords":[[35.717492,139.765507],[35.717556,139.765435]]},{"id":162,"state":"減速・右カーブ","name":"減速・右カーブ","color":"#fa2ea6","categories":["deceleration","rightTurn"],"countedCategories":["deceleration","rightTurn"],"avgSpeed":33.8,"startTime":"12:04:24","endTime":"12:04:24","coords":[[35.717556,139.765435],[35.717621,139.765368]]},{"id":163,"state":"減速","name":"減速","color":"#ff2626","categories":["deceleration"],"countedCategories":["deceleration"],"avgSpeed":25.3,"startTime":"12:04:25","endTime":"12:04:28","coords":[[35.717621,139.765368],[35.717682,139.765305],[35.717734,139.765255],[35.717771,139.765217],[35.717801,139.765184]]},{"id":164,"state":"減速・左カーブ","name":"減速・左カーブ","color":"#b340f2","categories":["deceleration","leftTurn"],"countedCategories":["deceleration","leftTurn"],"avgSpeed":14.4,"startTime":"12:04:29","endTime":"12:04:29","coords":[[35.717801,139.765184],[35.717818,139.765157]]},{"id":165,"state":"左カーブ","name":"左カーブ","color":"#00d1ff","categories":["leftTurn"],"countedCategories":["leftTurn"],"avgSpeed":13.6,"startTime":"12:04:30","endTime":"12:04:32","coords":[[35.717818,139.765157],[35.717823,139.765136],[35.717819,139.765111],[35.717807,139.765078]]},{"id":166,"state":"加速・左カーブ","name":"加速・左カーブ","color":"#2673ff","categories":["acceleration","leftTurn"],"countedCategories":["acceleration","leftTurn"],"avgSpeed":19.1,"startTime":"12:04:33","endTime":"12:04:33","coords":[[35.717807,139.765078],[35.717783,139.765039]]},{"id":167,"state":"加速","name":"加速","color":"#16e04d","categories":["acceleration"],"countedCategories":["acceleration"],"avgSpeed":21.4,"startTime":"12:04:34","endTime":"12:04:34","coords":[[35.717783,139.765039],[35.717750,139.764989]]},{"id":168,"state":"右カーブ","name":"右カーブ","color":"#ff8c00","categories":["rightTurn"],"countedCategories":["rightTurn"],"avgSpeed":23.4,"startTime":"12:04:35","endTime":"12:04:35","coords":[[35.717750,139.764989],[35.717711,139.764930]]},{"id":169,"state":"減速・右カーブ","name":"減速・右カーブ","color":"#fa2ea6","categories":["deceleration","rightTurn"],"countedCategories":["rightTurn"],"avgSpeed":25.1,"startTime":"12:04:36","endTime":"12:04:36","coords":[[35.717711,139.764930],[35.717669,139.764867]]},{"id":170,"state":"減速","name":"減速","color":"#ff2626","categories":["deceleration"],"countedCategories":[],"avgSpeed":25.4,"startTime":"12:04:37","endTime":"12:04:37","coords":[[35.717669,139.764867],[35.717629,139.764800]]},{"id":171,"state":"右カーブ","name":"右カーブ","color":"#ff8c00","categories":["rightTurn"],"countedCategories":[],"avgSpeed":24.7,"startTime":"12:04:38","endTime":"12:04:38","coords":[[35.717629,139.764800],[35.717592,139.764740]]},{"id":172,"state":"直進・安定","name":"直進・安定","color":"#eab308","categories":["straight"],"countedCategories":[],"avgSpeed":24.4,"startTime":"12:04:39","endTime":"12:04:39","coords":[[35.717592,139.764740],[35.717554,139.764681]]},{"id":173,"state":"左カーブ","name":"左カーブ","color":"#00d1ff","categories":["leftTurn"],"countedCategories":[],"avgSpeed":24.8,"startTime":"12:04:40","endTime":"12:04:40","coords":[[35.717554,139.764681],[35.717513,139.764622]]},{"id":174,"state":"直進・安定","name":"直進・安定","color":"#eab308","categories":["straight"],"countedCategories":[],"avgSpeed":25.6,"startTime":"12:04:41","endTime":"12:04:41","coords":[[35.717513,139.764622],[35.717471,139.764566]]},{"id":175,"state":"加速","name":"加速","color":"#16e04d","categories":["acceleration"],"countedCategories":["acceleration"],"avgSpeed":26.2,"startTime":"12:04:42","endTime":"12:04:42","coords":[[35.717471,139.764566],[35.717426,139.764510]]},{"id":176,"state":"加速・右カーブ","name":"加速・右カーブ","color":"#adf226","categories":["acceleration","rightTurn"],"countedCategories":["acceleration"],"avgSpeed":27.8,"startTime":"12:04:43","endTime":"12:04:43","coords":[[35.717426,139.764510],[35.717374,139.764448]]},{"id":177,"state":"加速","name":"加速","color":"#16e04d","categories":["acceleration"],"countedCategories":["acceleration"],"avgSpeed":30.5,"startTime":"12:04:44","endTime":"12:04:44","coords":[[35.717374,139.764448],[35.717317,139.764378]]},{"id":178,"state":"加速・右カーブ","name":"加速・右カーブ","color":"#adf226","categories":["acceleration","rightTurn"],"countedCategories":["acceleration","rightTurn"],"avgSpeed":33.2,"startTime":"12:04:45","endTime":"12:04:45","coords":[[35.717317,139.764378],[35.717257,139.764301]]},{"id":179,"state":"右カーブ","name":"右カーブ","color":"#ff8c00","categories":["rightTurn"],"countedCategories":["rightTurn"],"avgSpeed":37.1,"startTime":"12:04:46","endTime":"12:04:49","coords":[[35.717257,139.764301],[35.717194,139.764217],[35.717130,139.764131],[35.717069,139.764040],[35.717004,139.763950]]},{"id":180,"state":"直進・安定","name":"直進・安定","color":"#eab308","categories":["straight"],"countedCategories":[],"avgSpeed":39.0,"startTime":"12:04:50","endTime":"12:04:50","coords":[[35.717004,139.763950],[35.716938,139.763861]]},{"id":181,"state":"減速・右カーブ","name":"減速・右カーブ","color":"#fa2ea6","categories":["deceleration","rightTurn"],"countedCategories":[],"avgSpeed":39.3,"startTime":"12:04:51","endTime":"12:04:51","coords":[[35.716938,139.763861],[35.716873,139.763770]]},{"id":182,"state":"直進・安定","name":"直進・安定","color":"#eab308","categories":["straight"],"countedCategories":[],"avgSpeed":39.2,"startTime":"12:04:52","endTime":"12:04:54","coords":[[35.716873,139.763770],[35.716808,139.763679],[35.716746,139.763587],[35.716683,139.763490]]},{"id":183,"state":"右カーブ","name":"右カーブ","color":"#ff8c00","categories":["rightTurn"],"countedCategories":["rightTurn"],"avgSpeed":41.2,"startTime":"12:04:55","endTime":"12:04:59","coords":[[35.716683,139.763490],[35.716620,139.763391],[35.716558,139.763292],[35.716495,139.763187],[35.716433,139.763081],[35.716370,139.762972]]},{"id":184,"state":"減速","name":"減速","color":"#ff2626","categories":["deceleration"],"countedCategories":[],"avgSpeed":42.8,"startTime":"12:05:00","endTime":"12:05:00","coords":[[35.716370,139.762972],[35.716309,139.762863]]},{"id":185,"state":"右カーブ","name":"右カーブ","color":"#ff8c00","categories":["rightTurn"],"countedCategories":["rightTurn"],"avgSpeed":42.0,"startTime":"12:05:01","endTime":"12:05:03","coords":[[35.716309,139.762863],[35.716250,139.762755],[35.716190,139.762647],[35.716132,139.762542]]},{"id":186,"state":"直進・安定","name":"直進・安定","color":"#eab308","categories":["straight"],"countedCategories":[],"avgSpeed":41.8,"startTime":"12:05:04","endTime":"12:05:04","coords":[[35.716132,139.762542],[35.716073,139.762436]]},{"id":187,"state":"左カーブ","name":"左カーブ","color":"#00d1ff","categories":["leftTurn"],"countedCategories":[],"avgSpeed":42.2,"startTime":"12:05:05","endTime":"12:05:05","coords":[[35.716073,139.762436],[35.716013,139.762326]]},{"id":188,"state":"直進・安定","name":"直進・安定","color":"#eab308","categories":["straight"],"countedCategories":[],"avgSpeed":43.2,"startTime":"12:05:06","endTime":"12:05:06","coords":[[35.716013,139.762326],[35.715952,139.762215]]},{"id":189,"state":"右カーブ","name":"右カーブ","color":"#ff8c00","categories":["rightTurn"],"countedCategories":["rightTurn"],"avgSpeed":44.2,"startTime":"12:05:07","endTime":"12:05:07","coords":[[35.715952,139.762215],[35.715887,139.762103]]},{"id":190,"state":"減速・右カーブ","name":"減速・右カーブ","color":"#fa2ea6","categories":["deceleration","rightTurn"],"countedCategories":["rightTurn"],"avgSpeed":44.4,"startTime":"12:05:08","endTime":"12:05:08","coords":[[35.715887,139.762103],[35.715822,139.761993]]},{"id":191,"state":"右カーブ","name":"右カーブ","color":"#ff8c00","categories":["rightTurn"],"countedCategories":["rightTurn"],"avgSpeed":41.3,"startTime":"12:05:09","endTime":"12:05:12","coords":[[35.715822,139.761993],[35.715764,139.761884],[35.715713,139.761771],[35.715669,139.761655],[35.715634,139.761535]]},{"id":192,"state":"加速・右カーブ","name":"加速・右カーブ","color":"#adf226","categories":["acceleration","rightTurn"],"countedCategories":["rightTurn"],"avgSpeed":40.1,"startTime":"12:05:13","endTime":"12:05:13","coords":[[35.715634,139.761535],[35.715607,139.761408]]},{"id":193,"state":"直進・安定","name":"直進・安定","color":"#eab308","categories":["straight"],"countedCategories":[],"avgSpeed":42.1,"startTime":"12:05:14","endTime":"12:05:16","coords":[[35.715607,139.761408],[35.715588,139.761278],[35.715571,139.761147],[35.715558,139.761012]]},{"id":194,"state":"減速・右カーブ","name":"減速・右カーブ","color":"#fa2ea6","categories":["deceleration","rightTurn"],"countedCategories":["deceleration"],"avgSpeed":43.6,"startTime":"12:05:17","endTime":"12:05:17","coords":[[35.715558,139.761012],[35.715541,139.760878]]},{"id":195,"state":"減速","name":"減速","color":"#ff2626","categories":["deceleration"],"countedCategories":["deceleration"],"avgSpeed":38.0,"startTime":"12:05:18","endTime":"12:05:23","coords":[[35.715541,139.760878],[35.715526,139.760747],[35.715512,139.760625],[35.715499,139.760509],[35.715485,139.760400],[35.715470,139.760294],[35.715456,139.760200]]},{"id":196,"state":"減速・右カーブ","name":"減速・右カーブ","color":"#fa2ea6","categories":["deceleration","rightTurn"],"countedCategories":["deceleration"],"avgSpeed":28.2,"startTime":"12:05:24","endTime":"12:05:24","coords":[[35.715456,139.760200],[35.715445,139.760122]]},{"id":197,"state":"減速","name":"減速","color":"#ff2626","categories":["deceleration"],"countedCategories":["deceleration"],"avgSpeed":16.3,"startTime":"12:05:25","endTime":"12:05:28","coords":[[35.715445,139.760122],[35.715439,139.760062],[35.715435,139.760012],[35.715431,139.759974],[35.715428,139.759952]]},{"id":198,"state":"直進・安定","name":"直進・安定","color":"#eab308","categories":["straight"],"countedCategories":[],"avgSpeed":0.7,"startTime":"12:05:29","endTime":"12:05:52","coords":[[35.715428,139.759952],[35.715426,139.759928],[35.715425,139.759923],[35.715426,139.759922],[35.715426,139.759923],[35.715425,139.759923],[35.715426,139.759922],[35.715426,139.759922],[35.715426,139.759922],[35.715426,139.759922],[35.715426,139.759922],[35.715426,139.759922],[35.715426,139.759922],[35.715426,139.759922],[35.715426,139.759922],[35.715426,139.759922],[35.715426,139.759922],[35.715426,139.759922],[35.715426,139.759922],[35.715426,139.759922],[35.715426,139.759922],[35.715426,139.759922],[35.715426,139.759922],[35.715426,139.759922],[35.715426,139.759922]]},{"id":199,"state":"加速","name":"加速","color":"#16e04d","categories":["acceleration"],"countedCategories":[],"avgSpeed":0.8,"startTime":"12:05:53","endTime":"12:05:53","coords":[[35.715426,139.759922],[35.715425,139.759917]]},{"id":200,"state":"左カーブ","name":"左カーブ","color":"#00d1ff","categories":["leftTurn"],"countedCategories":[],"avgSpeed":2.8,"startTime":"12:05:54","endTime":"12:05:54","coords":[[35.715425,139.759917],[35.715424,139.759905]]},{"id":201,"state":"加速","name":"加速","color":"#16e04d","categories":["acceleration"],"countedCategories":["acceleration"],"avgSpeed":6.8,"startTime":"12:05:55","endTime":"12:05:57","coords":[[35.715424,139.759905],[35.715421,139.759885],[35.715419,139.759862],[35.715416,139.759832]]},{"id":202,"state":"直進・安定","name":"直進・安定","color":"#eab308","categories":["straight"],"countedCategories":[],"avgSpeed":14.2,"startTime":"12:05:58","endTime":"12:06:01","coords":[[35.715416,139.759832],[35.715411,139.759794],[35.715406,139.759750],[35.715399,139.759699],[35.715394,139.759644]]},{"id":203,"state":"加速","name":"加速","color":"#16e04d","categories":["acceleration"],"countedCategories":[],"avgSpeed":19.3,"startTime":"12:06:02","endTime":"12:06:02","coords":[[35.715394,139.759644],[35.715388,139.759581]]},{"id":204,"state":"直進・安定","name":"直進・安定","color":"#eab308","categories":["straight"],"countedCategories":[],"avgSpeed":22.9,"startTime":"12:06:03","endTime":"12:06:04","coords":[[35.715388,139.759581],[35.715382,139.759510],[35.715375,139.759434]]},{"id":205,"state":"減速","name":"減速","color":"#ff2626","categories":["deceleration"],"countedCategories":["deceleration"],"avgSpeed":26.2,"startTime":"12:06:05","endTime":"12:06:06","coords":[[35.715375,139.759434],[35.715367,139.759352],[35.715359,139.759270]]},{"id":206,"state":"減速・右カーブ","name":"減速・右カーブ","color":"#fa2ea6","categories":["deceleration","rightTurn"],"countedCategories":["deceleration"],"avgSpeed":25.9,"startTime":"12:06:07","endTime":"12:06:07","coords":[[35.715359,139.759270],[35.715351,139.759193]]},{"id":207,"state":"減速","name":"減速","color":"#ff2626","categories":["deceleration"],"countedCategories":["deceleration"],"avgSpeed":23.3,"startTime":"12:06:08","endTime":"12:06:09","coords":[[35.715351,139.759193],[35.715344,139.759121],[35.715338,139.759058]]},{"id":208,"state":"左カーブ","name":"左カーブ","color":"#00d1ff","categories":["leftTurn"],"countedCategories":["leftTurn"],"avgSpeed":20.4,"startTime":"12:06:10","endTime":"12:06:11","coords":[[35.715338,139.759058],[35.715330,139.758999],[35.715320,139.758938]]},{"id":209,"state":"加速・左カーブ","name":"加速・左カーブ","color":"#2673ff","categories":["acceleration","leftTurn"],"countedCategories":["leftTurn"],"avgSpeed":21.9,"startTime":"12:06:12","endTime":"12:06:12","coords":[[35.715320,139.758938],[35.715307,139.758871]]},{"id":210,"state":"右カーブ","name":"右カーブ","color":"#ff8c00","categories":["rightTurn"],"countedCategories":[],"avgSpeed":24.8,"startTime":"12:06:13","endTime":"12:06:13","coords":[[35.715307,139.758871],[35.715290,139.758796]]},{"id":211,"state":"加速・左カーブ","name":"加速・左カーブ","color":"#2673ff","categories":["acceleration","leftTurn"],"countedCategories":["leftTurn"],"avgSpeed":27.8,"startTime":"12:06:14","endTime":"12:06:14","coords":[[35.715290,139.758796],[35.715269,139.758713]]},{"id":212,"state":"左カーブ","name":"左カーブ","color":"#00d1ff","categories":["leftTurn"],"countedCategories":["leftTurn"],"avgSpeed":30.8,"startTime":"12:06:15","endTime":"12:06:15","coords":[[35.715269,139.758713],[35.715245,139.758621]]},{"id":213,"state":"減速・右カーブ","name":"減速・右カーブ","color":"#fa2ea6","categories":["deceleration","rightTurn"],"countedCategories":["deceleration"],"avgSpeed":32.2,"startTime":"12:06:16","endTime":"12:06:16","coords":[[35.715245,139.758621],[35.715218,139.758529]]},{"id":214,"state":"減速・左カーブ","name":"減速・左カーブ","color":"#b340f2","categories":["deceleration","leftTurn"],"countedCategories":["deceleration"],"avgSpeed":31.9,"startTime":"12:06:17","endTime":"12:06:17","coords":[[35.715218,139.758529],[35.715192,139.758439]]},{"id":215,"state":"減速","name":"減速","color":"#ff2626","categories":["deceleration"],"countedCategories":["deceleration"],"avgSpeed":28.5,"startTime":"12:06:18","endTime":"12:06:19","coords":[[35.715192,139.758439],[35.715166,139.758356],[35.715141,139.758289]]},{"id":216,"state":"減速・左カーブ","name":"減速・左カーブ","color":"#b340f2","categories":["deceleration","leftTurn"],"countedCategories":["deceleration","leftTurn"],"avgSpeed":23.6,"startTime":"12:06:20","endTime":"12:06:20","coords":[[35.715141,139.758289],[35.715114,139.758232]]},{"id":217,"state":"左カーブ","name":"左カーブ","color":"#00d1ff","categories":["leftTurn"],"countedCategories":["leftTurn"],"avgSpeed":22.1,"startTime":"12:06:21","endTime":"12:06:22","coords":[[35.715114,139.758232],[35.715086,139.758180],[35.715053,139.758130]]},{"id":218,"state":"加速・左カーブ","name":"加速・左カーブ","color":"#2673ff","categories":["acceleration","leftTurn"],"countedCategories":["acceleration","leftTurn"],"avgSpeed":22.9,"startTime":"12:06:23","endTime":"12:06:23","coords":[[35.715053,139.758130],[35.715016,139.758083]]},{"id":219,"state":"加速","name":"加速","color":"#16e04d","categories":["acceleration"],"countedCategories":["acceleration"],"avgSpeed":23.9,"startTime":"12:06:24","endTime":"12:06:24","coords":[[35.715016,139.758083],[35.714976,139.758029]]},{"id":220,"state":"加速・右カーブ","name":"加速・右カーブ","color":"#adf226","categories":["acceleration","rightTurn"],"countedCategories":["acceleration"],"avgSpeed":25.0,"startTime":"12:06:25","endTime":"12:06:25","coords":[[35.714976,139.758029],[35.714931,139.757968]]},{"id":221,"state":"減速","name":"減速","color":"#ff2626","categories":["deceleration"],"countedCategories":["deceleration"],"avgSpeed":24.4,"startTime":"12:06:26","endTime":"12:06:29","coords":[[35.714931,139.757968],[35.714886,139.757903],[35.714844,139.757838],[35.714804,139.757785],[35.714771,139.757739]]},{"id":222,"state":"減速・右カーブ","name":"減速・右カーブ","color":"#fa2ea6","categories":["deceleration","rightTurn"],"countedCategories":["deceleration"],"avgSpeed":17.8,"startTime":"12:06:30","endTime":"12:06:30","coords":[[35.714771,139.757739],[35.714746,139.757701]]},{"id":223,"state":"減速","name":"減速","color":"#ff2626","categories":["deceleration"],"countedCategories":["deceleration"],"avgSpeed":10.4,"startTime":"12:06:31","endTime":"12:06:33","coords":[[35.714746,139.757701],[35.714726,139.757672],[35.714713,139.757653],[35.714704,139.757640]]},{"id":224,"state":"直進・安定","name":"直進・安定","color":"#eab308","categories":["straight"],"countedCategories":[],"avgSpeed":1.4,"startTime":"12:06:34","endTime":"12:06:42","coords":[[35.714704,139.757640],[35.714699,139.757632],[35.714695,139.757625],[35.714692,139.757621],[35.714693,139.757621],[35.714693,139.757621],[35.714694,139.757621],[35.714694,139.757621],[35.714694,139.757620],[35.714694,139.757620]]},{"id":225,"state":"加速","name":"加速","color":"#16e04d","categories":["acceleration"],"countedCategories":["acceleration"],"avgSpeed":6.4,"startTime":"12:06:43","endTime":"12:06:48","coords":[[35.714694,139.757620],[35.714694,139.757620],[35.714692,139.757616],[35.714684,139.757603],[35.714670,139.757581],[35.714649,139.757550],[35.714624,139.757517]]},{"id":226,"state":"左カーブ","name":"左カーブ","color":"#00d1ff","categories":["leftTurn"],"countedCategories":["leftTurn"],"avgSpeed":20.4,"startTime":"12:06:49","endTime":"12:06:52","coords":[[35.714624,139.757517],[35.714595,139.757479],[35.714559,139.757440],[35.714517,139.757401],[35.714467,139.757368]]},{"id":227,"state":"加速・左カーブ","name":"加速・左カーブ","color":"#2673ff","categories":["acceleration","leftTurn"],"countedCategories":["acceleration","leftTurn"],"avgSpeed":28.9,"startTime":"12:06:53","endTime":"12:06:55","coords":[[35.714467,139.757368],[35.714408,139.757338],[35.714341,139.757314],[35.714266,139.757291]]},{"id":228,"state":"直進・安定","name":"直進・安定","color":"#eab308","categories":["straight"],"countedCategories":[],"avgSpeed":33.5,"startTime":"12:06:56","endTime":"12:06:56","coords":[[35.714266,139.757291],[35.714183,139.757270]]},{"id":229,"state":"右カーブ","name":"右カーブ","color":"#ff8c00","categories":["rightTurn"],"countedCategories":["rightTurn"],"avgSpeed":35.4,"startTime":"12:06:57","endTime":"12:07:04","coords":[[35.714183,139.757270],[35.714096,139.757252],[35.714010,139.757230],[35.713924,139.757203],[35.713839,139.757173],[35.713753,139.757141],[35.713667,139.757102],[35.713582,139.757049],[35.713499,139.756983]]},{"id":230,"state":"加速・左カーブ","name":"加速・左カーブ","color":"#2673ff","categories":["acceleration","leftTurn"],"countedCategories":[],"avgSpeed":39.1,"startTime":"12:07:05","endTime":"12:07:05","coords":[[35.713499,139.756983],[35.713416,139.756910]]},{"id":231,"state":"直進・安定","name":"直進・安定","color":"#eab308","categories":["straight"],"countedCategories":[],"avgSpeed":41.4,"startTime":"12:07:06","endTime":"12:07:06","coords":[[35.713416,139.756910],[35.713330,139.756828]]},{"id":232,"state":"加速・右カーブ","name":"加速・右カーブ","color":"#adf226","categories":["acceleration","rightTurn"],"countedCategories":[],"avgSpeed":43.7,"startTime":"12:07:07","endTime":"12:07:07","coords":[[35.713330,139.756828],[35.713238,139.756745]]},{"id":233,"state":"加速","name":"加速","color":"#16e04d","categories":["acceleration"],"countedCategories":[],"avgSpeed":45.7,"startTime":"12:07:08","endTime":"12:07:08","coords":[[35.713238,139.756745],[35.713139,139.756668]]},{"id":234,"state":"右カーブ","name":"右カーブ","color":"#ff8c00","categories":["rightTurn"],"countedCategories":["rightTurn"],"avgSpeed":48.3,"startTime":"12:07:09","endTime":"12:07:10","coords":[[35.713139,139.756668],[35.713040,139.756586],[35.712939,139.756497]]},{"id":235,"state":"減速","name":"減速","color":"#ff2626","categories":["deceleration"],"countedCategories":["deceleration"],"avgSpeed":49.9,"startTime":"12:07:11","endTime":"12:07:12","coords":[[35.712939,139.756497],[35.712836,139.756409],[35.712735,139.756320]]},{"id":236,"state":"減速・右カーブ","name":"減速・右カーブ","color":"#fa2ea6","categories":["deceleration","rightTurn"],"countedCategories":["deceleration","rightTurn"],"avgSpeed":49.5,"startTime":"12:07:13","endTime":"12:07:13","coords":[[35.712735,139.756320],[35.712632,139.756233]]},{"id":237,"state":"右カーブ","name":"右カーブ","color":"#ff8c00","categories":["rightTurn"],"countedCategories":["rightTurn"],"avgSpeed":49.2,"startTime":"12:07:14","endTime":"12:07:14","coords":[[35.712632,139.756233],[35.712532,139.756142]]},{"id":238,"state":"減速・右カーブ","name":"減速・右カーブ","color":"#fa2ea6","categories":["deceleration","rightTurn"],"countedCategories":["deceleration","rightTurn"],"avgSpeed":50.1,"startTime":"12:07:15","endTime":"12:07:15","coords":[[35.712532,139.756142],[35.712427,139.756051]]},{"id":239,"state":"減速","name":"減速","color":"#ff2626","categories":["deceleration"],"countedCategories":["deceleration"],"avgSpeed":49.9,"startTime":"12:07:16","endTime":"12:07:16","coords":[[35.712427,139.756051],[35.712327,139.755966]]},{"id":240,"state":"減速・右カーブ","name":"減速・右カーブ","color":"#fa2ea6","categories":["deceleration","rightTurn"],"countedCategories":["deceleration"],"avgSpeed":47.1,"startTime":"12:07:17","endTime":"12:07:17","coords":[[35.712327,139.755966],[35.712236,139.755884]]},{"id":241,"state":"減速","name":"減速","color":"#ff2626","categories":["deceleration"],"countedCategories":["deceleration"],"avgSpeed":32.0,"startTime":"12:07:18","endTime":"12:07:24","coords":[[35.712236,139.755884],[35.712152,139.755809],[35.712078,139.755741],[35.712010,139.755680],[35.711949,139.755627],[35.711896,139.755580],[35.711851,139.755538],[35.711811,139.755499]]},{"id":242,"state":"減速・左カーブ","name":"減速・左カーブ","color":"#b340f2","categories":["deceleration","leftTurn"],"countedCategories":["deceleration"],"avgSpeed":19.8,"startTime":"12:07:25","endTime":"12:07:25","coords":[[35.711811,139.755499],[35.711773,139.755465]]},{"id":243,"state":"減速","name":"減速","color":"#ff2626","categories":["deceleration"],"countedCategories":["deceleration"],"avgSpeed":15.6,"startTime":"12:07:26","endTime":"12:07:29","coords":[[35.711773,139.755465],[35.711737,139.755434],[35.711702,139.755403],[35.711674,139.755375],[35.711651,139.755351]]},{"id":244,"state":"減速・左カーブ","name":"減速・左カーブ","color":"#b340f2","categories":["deceleration","leftTurn"],"countedCategories":["deceleration"],"avgSpeed":10.2,"startTime":"12:07:30","endTime":"12:07:30","coords":[[35.711651,139.755351],[35.711633,139.755330]]},{"id":245,"state":"減速","name":"減速","color":"#ff2626","categories":["deceleration"],"countedCategories":["deceleration"],"avgSpeed":7.1,"startTime":"12:07:31","endTime":"12:07:32","coords":[[35.711633,139.755330],[35.711619,139.755312],[35.711607,139.755302]]},{"id":246,"state":"直進・安定","name":"直進・安定","color":"#eab308","categories":["straight"],"countedCategories":[],"avgSpeed":0.7,"startTime":"12:07:33","endTime":"12:07:44","coords":[[35.711607,139.755302],[35.711604,139.755299],[35.711603,139.755296],[35.711603,139.755294],[35.711603,139.755294],[35.711604,139.755293],[35.711603,139.755293],[35.711603,139.755293],[35.711604,139.755292],[35.711604,139.755292],[35.711604,139.755292],[35.711604,139.755292],[35.711604,139.755292]]},{"id":247,"state":"加速","name":"加速","color":"#16e04d","categories":["acceleration"],"countedCategories":["acceleration"],"avgSpeed":0.0,"startTime":"12:07:45","endTime":"12:07:45","coords":[[35.711604,139.755292],[35.711604,139.755292]]},{"id":248,"state":"加速・左カーブ","name":"加速・左カーブ","color":"#2673ff","categories":["acceleration","leftTurn"],"countedCategories":["acceleration"],"avgSpeed":0.7,"startTime":"12:07:46","endTime":"12:07:46","coords":[[35.711604,139.755292],[35.711603,139.755288]]},{"id":249,"state":"加速","name":"加速","color":"#16e04d","categories":["acceleration"],"countedCategories":["acceleration"],"avgSpeed":6.3,"startTime":"12:07:47","endTime":"12:07:49","coords":[[35.711603,139.755288],[35.711596,139.755278],[35.711584,139.755259],[35.711565,139.755230]]},{"id":250,"state":"直進・安定","name":"直進・安定","color":"#eab308","categories":["straight"],"countedCategories":[],"avgSpeed":13.7,"startTime":"12:07:50","endTime":"12:07:50","coords":[[35.711565,139.755230],[35.711540,139.755189]]},{"id":251,"state":"右カーブ","name":"右カーブ","color":"#ff8c00","categories":["rightTurn"],"countedCategories":["rightTurn"],"avgSpeed":18.0,"startTime":"12:07:51","endTime":"12:07:55","coords":[[35.711540,139.755189],[35.711511,139.755141],[35.711484,139.755092],[35.711457,139.755039],[35.711437,139.754985],[35.711419,139.754927]]},{"id":252,"state":"減速・右カーブ","name":"減速・右カーブ","color":"#fa2ea6","categories":["deceleration","rightTurn"],"countedCategories":["rightTurn"],"avgSpeed":18.2,"startTime":"12:07:56","endTime":"12:07:56","coords":[[35.711419,139.754927],[35.711408,139.754866]]},{"id":253,"state":"直進・安定","name":"直進・安定","color":"#eab308","categories":["straight"],"countedCategories":[],"avgSpeed":17.5,"startTime":"12:07:57","endTime":"12:07:57","coords":[[35.711408,139.754866],[35.711402,139.754808]]},{"id":254,"state":"減速","name":"減速","color":"#ff2626","categories":["deceleration"],"countedCategories":[],"avgSpeed":16.5,"startTime":"12:07:58","endTime":"12:07:58","coords":[[35.711402,139.754808],[35.711397,139.754755]]},{"id":255,"state":"直進・安定","name":"直進・安定","color":"#eab308","categories":["straight"],"countedCategories":[],"avgSpeed":15.9,"startTime":"12:07:59","endTime":"12:08:00","coords":[[35.711397,139.754755],[35.711394,139.754705],[35.711390,139.754658]]},{"id":256,"state":"加速・左カーブ","name":"加速・左カーブ","color":"#2673ff","categories":["acceleration","leftTurn"],"countedCategories":["acceleration","leftTurn"],"avgSpeed":16.7,"startTime":"12:08:01","endTime":"12:08:02","coords":[[35.711390,139.754658],[35.711387,139.754609],[35.711380,139.754557]]},{"id":257,"state":"加速","name":"加速","color":"#16e04d","categories":["acceleration"],"countedCategories":["acceleration"],"avgSpeed":20.9,"startTime":"12:08:03","endTime":"12:08:04","coords":[[35.711380,139.754557],[35.711369,139.754496],[35.711359,139.754427]]},{"id":258,"state":"加速・左カーブ","name":"加速・左カーブ","color":"#2673ff","categories":["acceleration","leftTurn"],"countedCategories":["acceleration"],"avgSpeed":25.5,"startTime":"12:08:05","endTime":"12:08:06","coords":[[35.711359,139.754427],[35.711350,139.754347],[35.711342,139.754259]]},{"id":259,"state":"直進・安定","name":"直進・安定","color":"#eab308","categories":["straight"],"countedCategories":[],"avgSpeed":29.2,"startTime":"12:08:07","endTime":"12:08:07","coords":[[35.711342,139.754259],[35.711334,139.754169]]},{"id":260,"state":"右カーブ","name":"右カーブ","color":"#ff8c00","categories":["rightTurn"],"countedCategories":[],"avgSpeed":30.8,"startTime":"12:08:08","endTime":"12:08:08","coords":[[35.711334,139.754169],[35.711322,139.754072]]},{"id":261,"state":"左カーブ","name":"左カーブ","color":"#00d1ff","categories":["leftTurn"],"countedCategories":["leftTurn"],"avgSpeed":31.5,"startTime":"12:08:09","endTime":"12:08:10","coords":[[35.711322,139.754072],[35.711313,139.753977],[35.711303,139.753880]]},{"id":262,"state":"直進・安定","name":"直進・安定","color":"#eab308","categories":["straight"],"countedCategories":[],"avgSpeed":32.2,"startTime":"12:08:11","endTime":"12:08:11","coords":[[35.711303,139.753880],[35.711290,139.753783]]},{"id":263,"state":"減速","name":"減速","color":"#ff2626","categories":["deceleration"],"countedCategories":["deceleration"],"avgSpeed":29.8,"startTime":"12:08:12","endTime":"12:08:14","coords":[[35.711290,139.753783],[35.711277,139.753687],[35.711265,139.753596],[35.711254,139.753521]]},{"id":264,"state":"減速・左カーブ","name":"減速・左カーブ","color":"#b340f2","categories":["deceleration","leftTurn"],"countedCategories":["deceleration"],"avgSpeed":23.9,"startTime":"12:08:15","endTime":"12:08:15","coords":[[35.711254,139.753521],[35.711243,139.753453]]},{"id":265,"state":"減速・右カーブ","name":"減速・右カーブ","color":"#fa2ea6","categories":["deceleration","rightTurn"],"countedCategories":["deceleration"],"avgSpeed":21.4,"startTime":"12:08:16","endTime":"12:08:16","coords":[[35.711243,139.753453],[35.711231,139.753393]]},{"id":266,"state":"減速","name":"減速","color":"#ff2626","categories":["deceleration"],"countedCategories":["deceleration"],"avgSpeed":14.9,"startTime":"12:08:17","endTime":"12:08:19","coords":[[35.711231,139.753393],[35.711215,139.753343],[35.711200,139.753302],[35.711192,139.753280]]},{"id":267,"state":"直進・安定","name":"直進・安定","color":"#eab308","categories":["straight"],"countedCategories":[],"avgSpeed":4.4,"startTime":"12:08:20","endTime":"12:08:23","coords":[[35.711192,139.753280],[35.711188,139.753269],[35.711185,139.753261],[35.711182,139.753250],[35.711179,139.753240]]},{"id":268,"state":"加速・左カーブ","name":"加速・左カーブ","color":"#2673ff","categories":["acceleration","leftTurn"],"countedCategories":[],"avgSpeed":4.5,"startTime":"12:08:24","endTime":"12:08:24","coords":[[35.711179,139.753240],[35.711174,139.753224]]},{"id":269,"state":"直進・安定","name":"直進・安定","color":"#eab308","categories":["straight"],"countedCategories":[],"avgSpeed":5.9,"startTime":"12:08:25","endTime":"12:08:25","coords":[[35.711174,139.753224],[35.711169,139.753205]]},{"id":270,"state":"加速","name":"加速","color":"#16e04d","categories":["acceleration"],"countedCategories":[],"avgSpeed":6.5,"startTime":"12:08:26","endTime":"12:08:26","coords":[[35.711169,139.753205],[35.711166,139.753185]]},{"id":271,"state":"直進・安定","name":"直進・安定","color":"#eab308","categories":["straight"],"countedCategories":[],"avgSpeed":7.4,"startTime":"12:08:27","endTime":"12:08:27","coords":[[35.711166,139.753185],[35.711163,139.753160]]},{"id":272,"state":"左カーブ","name":"左カーブ","color":"#00d1ff","categories":["leftTurn"],"countedCategories":[],"avgSpeed":9.2,"startTime":"12:08:28","endTime":"12:08:28","coords":[[35.711163,139.753160],[35.711155,139.753127]]},{"id":273,"state":"直進・安定","name":"直進・安定","color":"#eab308","categories":["straight"],"countedCategories":[],"avgSpeed":10.0,"startTime":"12:08:29","endTime":"12:08:30","coords":[[35.711155,139.753127],[35.711151,139.753099],[35.711144,139.753070]]},{"id":274,"state":"左カーブ","name":"左カーブ","color":"#00d1ff","categories":["leftTurn"],"countedCategories":["leftTurn"],"avgSpeed":10.9,"startTime":"12:08:31","endTime":"12:08:31","coords":[[35.711144,139.753070],[35.711134,139.753042]]},{"id":275,"state":"加速・左カーブ","name":"加速・左カーブ","color":"#2673ff","categories":["acceleration","leftTurn"],"countedCategories":["leftTurn"],"avgSpeed":11.7,"startTime":"12:08:32","endTime":"12:08:32","coords":[[35.711134,139.753042],[35.711123,139.753019]]},{"id":276,"state":"左カーブ","name":"左カーブ","color":"#00d1ff","categories":["leftTurn"],"countedCategories":["leftTurn"],"avgSpeed":16.4,"startTime":"12:08:33","endTime":"12:08:35","coords":[[35.711123,139.753019],[35.711101,139.752994],[35.711097,139.752973],[35.711035,139.752976]]},{"id":277,"state":"加速・左カーブ","name":"加速・左カーブ","color":"#2673ff","categories":["acceleration","leftTurn"],"countedCategories":["acceleration","leftTurn"],"avgSpeed":21.1,"startTime":"12:08:36","endTime":"12:08:36","coords":[[35.711035,139.752976],[35.710989,139.752982]]},{"id":278,"state":"加速","name":"加速","color":"#16e04d","categories":["acceleration"],"countedCategories":["acceleration"],"avgSpeed":26.7,"startTime":"12:08:37","endTime":"12:08:39","coords":[[35.710989,139.752982],[35.710937,139.752997],[35.710869,139.753017],[35.710796,139.753045]]},{"id":279,"state":"加速・左カーブ","name":"加速・左カーブ","color":"#2673ff","categories":["acceleration","leftTurn"],"countedCategories":["acceleration"],"avgSpeed":32.6,"startTime":"12:08:40","endTime":"12:08:40","coords":[[35.710796,139.753045],[35.710713,139.753072]]},{"id":280,"state":"右カーブ","name":"右カーブ","color":"#ff8c00","categories":["rightTurn"],"countedCategories":[],"avgSpeed":35.1,"startTime":"12:08:41","endTime":"12:08:41","coords":[[35.710713,139.753072],[35.710625,139.753100]]},{"id":281,"state":"加速・左カーブ","name":"加速・左カーブ","color":"#2673ff","categories":["acceleration","leftTurn"],"countedCategories":["acceleration","leftTurn"],"avgSpeed":38.4,"startTime":"12:08:42","endTime":"12:08:43","coords":[[35.710625,139.753100],[35.710532,139.753129],[35.710433,139.753155]]},{"id":282,"state":"直進・安定","name":"直進・安定","color":"#eab308","categories":["straight"],"countedCategories":[],"avgSpeed":41.5,"startTime":"12:08:44","endTime":"12:08:44","coords":[[35.710433,139.753155],[35.710330,139.753187]]},{"id":283,"state":"右カーブ","name":"右カーブ","color":"#ff8c00","categories":["rightTurn"],"countedCategories":["rightTurn"],"avgSpeed":43.2,"startTime":"12:08:45","endTime":"12:08:45","coords":[[35.710330,139.753187],[35.710221,139.753220]]},{"id":284,"state":"減速・右カーブ","name":"減速・右カーブ","color":"#fa2ea6","categories":["deceleration","rightTurn"],"countedCategories":["deceleration","rightTurn"],"avgSpeed":44.3,"startTime":"12:08:46","endTime":"12:08:46","coords":[[35.710221,139.753220],[35.710112,139.753254]]},{"id":285,"state":"減速","name":"減速","color":"#ff2626","categories":["deceleration"],"countedCategories":["deceleration"],"avgSpeed":44.0,"startTime":"12:08:47","endTime":"12:08:47","coords":[[35.710112,139.753254],[35.710004,139.753283]]},{"id":286,"state":"減速・右カーブ","name":"減速・右カーブ","color":"#fa2ea6","categories":["deceleration","rightTurn"],"countedCategories":["deceleration"],"avgSpeed":43.1,"startTime":"12:08:48","endTime":"12:08:48","coords":[[35.710004,139.753283],[35.709899,139.753313]]},{"id":287,"state":"減速・左カーブ","name":"減速・左カーブ","color":"#b340f2","categories":["deceleration","leftTurn"],"countedCategories":["deceleration"],"avgSpeed":42.4,"startTime":"12:08:49","endTime":"12:08:49","coords":[[35.709899,139.753313],[35.709795,139.753343]]},{"id":288,"state":"減速","name":"減速","color":"#ff2626","categories":["deceleration"],"countedCategories":["deceleration"],"avgSpeed":41.9,"startTime":"12:08:50","endTime":"12:08:52","coords":[[35.709795,139.753343],[35.709693,139.753376],[35.709591,139.753407],[35.709491,139.753437]]},{"id":289,"state":"減速・右カーブ","name":"減速・右カーブ","color":"#fa2ea6","categories":["deceleration","rightTurn"],"countedCategories":["deceleration"],"avgSpeed":41.3,"startTime":"12:08:53","endTime":"12:08:53","coords":[[35.709491,139.753437],[35.709392,139.753476]]},{"id":290,"state":"減速","name":"減速","color":"#ff2626","categories":["deceleration"],"countedCategories":["deceleration"],"avgSpeed":40.4,"startTime":"12:08:54","endTime":"12:08:54","coords":[[35.709392,139.753476],[35.709299,139.753516]]},{"id":291,"state":"減速・右カーブ","name":"減速・右カーブ","color":"#fa2ea6","categories":["deceleration","rightTurn"],"countedCategories":["deceleration"],"avgSpeed":37.6,"startTime":"12:08:55","endTime":"12:08:55","coords":[[35.709299,139.753516],[35.709214,139.753549]]},{"id":292,"state":"減速","name":"減速","color":"#ff2626","categories":["deceleration"],"countedCategories":["deceleration"],"avgSpeed":21.0,"startTime":"12:08:56","endTime":"12:09:02","coords":[[35.709214,139.753549],[35.709136,139.753575],[35.709064,139.753598],[35.709008,139.753614],[35.708962,139.753626],[35.708928,139.753636],[35.708902,139.753644],[35.708889,139.753646]]},{"id":293,"state":"直進・安定","name":"直進・安定","color":"#eab308","categories":["straight"],"countedCategories":[],"avgSpeed":0.8,"startTime":"12:09:03","endTime":"12:09:10","coords":[[35.708889,139.753646],[35.708884,139.753648],[35.708884,139.753649],[35.708885,139.753650],[35.708885,139.753650],[35.708885,139.753651],[35.708885,139.753651],[35.708885,139.753652],[35.708885,139.753652]]},{"id":294,"state":"加速","name":"加速","color":"#16e04d","categories":["acceleration"],"countedCategories":["acceleration"],"avgSpeed":6.6,"startTime":"12:09:11","endTime":"12:09:15","coords":[[35.708885,139.753652],[35.708884,139.753653],[35.708879,139.753654],[35.708862,139.753661],[35.708830,139.753669],[35.708789,139.753680]]},{"id":295,"state":"直進・安定","name":"直進・安定","color":"#eab308","categories":["straight"],"countedCategories":[],"avgSpeed":18.4,"startTime":"12:09:16","endTime":"12:09:16","coords":[[35.708789,139.753680],[35.708740,139.753693]]},{"id":296,"state":"左カーブ","name":"左カーブ","color":"#00d1ff","categories":["leftTurn"],"countedCategories":["leftTurn"],"avgSpeed":23.7,"startTime":"12:09:17","endTime":"12:09:22","coords":[[35.708740,139.753693],[35.708689,139.753708],[35.708636,139.753723],[35.708584,139.753747],[35.708537,139.753783],[35.708485,139.753779],[35.708470,139.753902]]},{"id":297,"state":"加速","name":"加速","color":"#16e04d","categories":["acceleration"],"countedCategories":[],"avgSpeed":28.5,"startTime":"12:09:23","endTime":"12:09:23","coords":[[35.708470,139.753902],[35.708451,139.753982]]},{"id":298,"state":"加速・右カーブ","name":"加速・右カーブ","color":"#adf226","categories":["acceleration","rightTurn"],"countedCategories":["rightTurn"],"avgSpeed":31.1,"startTime":"12:09:24","endTime":"12:09:24","coords":[[35.708451,139.753982],[35.708424,139.754078]]},{"id":299,"state":"右カーブ","name":"右カーブ","color":"#ff8c00","categories":["rightTurn"],"countedCategories":["rightTurn"],"avgSpeed":37.9,"startTime":"12:09:25","endTime":"12:09:27","coords":[[35.708424,139.754078],[35.708388,139.754186],[35.708339,139.754297],[35.708281,139.754407]]},{"id":300,"state":"直進・安定","name":"直進・安定","color":"#eab308","categories":["straight"],"countedCategories":[],"avgSpeed":42.7,"startTime":"12:09:28","endTime":"12:09:28","coords":[[35.708281,139.754407],[35.708219,139.754520]]},{"id":301,"state":"減速","name":"減速","color":"#ff2626","categories":["deceleration"],"countedCategories":[],"avgSpeed":44.3,"startTime":"12:09:29","endTime":"12:09:29","coords":[[35.708219,139.754520],[35.708159,139.754635]]},{"id":302,"state":"右カーブ","name":"右カーブ","color":"#ff8c00","categories":["rightTurn"],"countedCategories":[],"avgSpeed":45.3,"startTime":"12:09:30","endTime":"12:09:30","coords":[[35.708159,139.754635],[35.708097,139.754752]]},{"id":303,"state":"直進・安定","name":"直進・安定","color":"#eab308","categories":["straight"],"countedCategories":[],"avgSpeed":46.5,"startTime":"12:09:31","endTime":"12:09:31","coords":[[35.708097,139.754752],[35.708034,139.754873]]},{"id":304,"state":"右カーブ","name":"右カーブ","color":"#ff8c00","categories":["rightTurn"],"countedCategories":[],"avgSpeed":47.8,"startTime":"12:09:32","endTime":"12:09:32","coords":[[35.708034,139.754873],[35.707971,139.754999]]},{"id":305,"state":"直進・安定","name":"直進・安定","color":"#eab308","categories":["straight"],"countedCategories":[],"avgSpeed":48.8,"startTime":"12:09:33","endTime":"12:09:33","coords":[[35.707971,139.754999],[35.707906,139.755126]]},{"id":306,"state":"右カーブ","name":"右カーブ","color":"#ff8c00","categories":["rightTurn"],"countedCategories":[],"avgSpeed":49.8,"startTime":"12:09:34","endTime":"12:09:34","coords":[[35.707906,139.755126],[35.707838,139.755256]]},{"id":307,"state":"減速","name":"減速","color":"#ff2626","categories":["deceleration"],"countedCategories":["deceleration"],"avgSpeed":49.5,"startTime":"12:09:35","endTime":"12:09:38","coords":[[35.707838,139.755256],[35.707770,139.755388],[35.707702,139.755521],[35.707637,139.755647],[35.707576,139.755770]]},{"id":308,"state":"減速・左カーブ","name":"減速・左カーブ","color":"#b340f2","categories":["deceleration","leftTurn"],"countedCategories":["deceleration","leftTurn"],"avgSpeed":45.5,"startTime":"12:09:39","endTime":"12:09:40","coords":[[35.707576,139.755770],[35.707522,139.755890],[35.707473,139.756011]]},{"id":309,"state":"左カーブ","name":"左カーブ","color":"#00d1ff","categories":["leftTurn"],"countedCategories":["leftTurn"],"avgSpeed":45.9,"startTime":"12:09:41","endTime":"12:09:46","coords":[[35.707473,139.756011],[35.707433,139.756137],[35.707399,139.756268],[35.707377,139.756403],[35.707362,139.756542],[35.707358,139.756683],[35.707361,139.756826]]},{"id":310,"state":"右カーブ","name":"右カーブ","color":"#ff8c00","categories":["rightTurn"],"countedCategories":[],"avgSpeed":48.1,"startTime":"12:09:47","endTime":"12:09:48","coords":[[35.707361,139.756826],[35.707369,139.756974],[35.707379,139.757128]]},{"id":311,"state":"減速・左カーブ","name":"減速・左カーブ","color":"#b340f2","categories":["deceleration","leftTurn"],"countedCategories":["deceleration"],"avgSpeed":49.6,"startTime":"12:09:49","endTime":"12:09:49","coords":[[35.707379,139.757128],[35.707375,139.757283]]},{"id":312,"state":"減速","name":"減速","color":"#ff2626","categories":["deceleration"],"countedCategories":["deceleration"],"avgSpeed":47.6,"startTime":"12:09:50","endTime":"12:09:52","coords":[[35.707375,139.757283],[35.707379,139.757436],[35.707378,139.757583],[35.707385,139.757714]]},{"id":313,"state":"減速・右カーブ","name":"減速・右カーブ","color":"#fa2ea6","categories":["deceleration","rightTurn"],"countedCategories":["deceleration","rightTurn"],"avgSpeed":39.0,"startTime":"12:09:53","endTime":"12:09:54","coords":[[35.707385,139.757714],[35.707391,139.757833],[35.707397,139.757943]]},{"id":314,"state":"右カーブ","name":"右カーブ","color":"#ff8c00","categories":["rightTurn"],"countedCategories":["rightTurn"],"avgSpeed":34.9,"startTime":"12:09:55","endTime":"12:09:55","coords":[[35.707397,139.757943],[35.707401,139.758048]]},{"id":315,"state":"直進・安定","name":"直進・安定","color":"#eab308","categories":["straight"],"countedCategories":[],"avgSpeed":33.9,"startTime":"12:09:56","endTime":"12:09:56","coords":[[35.707401,139.758048],[35.707405,139.758150]]},{"id":316,"state":"右カーブ","name":"右カーブ","color":"#ff8c00","categories":["rightTurn"],"countedCategories":[],"avgSpeed":33.6,"startTime":"12:09:57","endTime":"12:09:57","coords":[[35.707405,139.758150],[35.707408,139.758253]]},{"id":317,"state":"直進・安定","name":"直進・安定","color":"#eab308","categories":["straight"],"countedCategories":[],"avgSpeed":34.8,"startTime":"12:09:58","endTime":"12:09:59","coords":[[35.707408,139.758253],[35.707410,139.758360],[35.707414,139.758469]]},{"id":318,"state":"加速","name":"加速","color":"#16e04d","categories":["acceleration"],"countedCategories":["acceleration"],"avgSpeed":36.5,"startTime":"12:10:00","endTime":"12:10:00","coords":[[35.707414,139.758469],[35.707419,139.758582]]},{"id":319,"state":"加速・左カーブ","name":"加速・左カーブ","color":"#2673ff","categories":["acceleration","leftTurn"],"countedCategories":["acceleration"],"avgSpeed":37.8,"startTime":"12:10:01","endTime":"12:10:01","coords":[[35.707419,139.758582],[35.707425,139.758699]]},{"id":320,"state":"直進・安定","name":"直進・安定","color":"#eab308","categories":["straight"],"countedCategories":[],"avgSpeed":39.6,"startTime":"12:10:02","endTime":"12:10:03","coords":[[35.707425,139.758699],[35.707431,139.758819],[35.707437,139.758945]]},{"id":321,"state":"減速・右カーブ","name":"減速・右カーブ","color":"#fa2ea6","categories":["deceleration","rightTurn"],"countedCategories":["deceleration"],"avgSpeed":41.1,"startTime":"12:10:04","endTime":"12:10:04","coords":[[35.707437,139.758945],[35.707441,139.759073]]},{"id":322,"state":"減速","name":"減速","color":"#ff2626","categories":["deceleration"],"countedCategories":["deceleration"],"avgSpeed":41.2,"startTime":"12:10:05","endTime":"12:10:05","coords":[[35.707441,139.759073],[35.707445,139.759199]]},{"id":323,"state":"直進・安定","name":"直進・安定","color":"#eab308","categories":["straight"],"countedCategories":[],"avgSpeed":40.1,"startTime":"12:10:06","endTime":"12:10:06","coords":[[35.707445,139.759199],[35.707451,139.759320]]},{"id":324,"state":"減速・左カーブ","name":"減速・左カーブ","color":"#b340f2","categories":["deceleration","leftTurn"],"countedCategories":[],"avgSpeed":38.6,"startTime":"12:10:07","endTime":"12:10:07","coords":[[35.707451,139.759320],[35.707458,139.759436]]},{"id":325,"state":"減速・右カーブ","name":"減速・右カーブ","color":"#fa2ea6","categories":["deceleration","rightTurn"],"countedCategories":[],"avgSpeed":37.2,"startTime":"12:10:08","endTime":"12:10:08","coords":[[35.707458,139.759436],[35.707467,139.759547]]},{"id":326,"state":"直進・安定","name":"直進・安定","color":"#eab308","categories":["straight"],"countedCategories":[],"avgSpeed":36.1,"startTime":"12:10:09","endTime":"12:10:09","coords":[[35.707467,139.759547],[35.707475,139.759657]]},{"id":327,"state":"減速","name":"減速","color":"#ff2626","categories":["deceleration"],"countedCategories":["deceleration"],"avgSpeed":25.0,"startTime":"12:10:10","endTime":"12:10:17","coords":[[35.707475,139.759657],[35.707483,139.759765],[35.707491,139.759867],[35.707502,139.759962],[35.707510,139.760043],[35.707517,139.760112],[35.707523,139.760167],[35.707527,139.760209],[35.707530,139.760236]]},{"id":328,"state":"直進・安定","name":"直進・安定","color":"#eab308","categories":["straight"],"countedCategories":[],"avgSpeed":0.3,"startTime":"12:10:18","endTime":"12:11:13","coords":[[35.707530,139.760236],[35.707531,139.760253],[35.707531,139.760260],[35.707531,139.760263],[35.707531,139.760263],[35.707532,139.760264],[35.707531,139.760264],[35.707531,139.760265],[35.707531,139.760264],[35.707531,139.760264],[35.707531,139.760264],[35.707531,139.760264],[35.707531,139.760264],[35.707531,139.760264],[35.707531,139.760264],[35.707531,139.760264],[35.707531,139.760264],[35.707531,139.760264],[35.707531,139.760264],[35.707531,139.760264],[35.707531,139.760264],[35.707531,139.760264],[35.707531,139.760264],[35.707531,139.760264],[35.707531,139.760264],[35.707531,139.760264],[35.707531,139.760264],[35.707531,139.760264],[35.707531,139.760264],[35.707531,139.760264],[35.707531,139.760264],[35.707531,139.760264],[35.707531,139.760264],[35.707531,139.760264],[35.707531,139.760264],[35.707531,139.760264],[35.707531,139.760264],[35.707531,139.760264],[35.707531,139.760264],[35.707531,139.760264],[35.707531,139.760264],[35.707531,139.760264],[35.707531,139.760264],[35.707531,139.760264],[35.707531,139.760264],[35.707531,139.760264],[35.707531,139.760264],[35.707531,139.760264],[35.707531,139.760264],[35.707531,139.760264],[35.707531,139.760264],[35.707531,139.760264],[35.707531,139.760264],[35.707531,139.760264],[35.707531,139.760264],[35.707531,139.760264],[35.707531,139.760264]]},{"id":329,"state":"加速","name":"加速","color":"#16e04d","categories":["acceleration"],"countedCategories":["acceleration"],"avgSpeed":8.2,"startTime":"12:11:14","endTime":"12:11:18","coords":[[35.707531,139.760264],[35.707531,139.760264],[35.707529,139.760282],[35.707531,139.760315],[35.707535,139.760364],[35.707540,139.760428]]},{"id":330,"state":"直進・安定","name":"直進・安定","color":"#eab308","categories":["straight"],"countedCategories":[],"avgSpeed":21.1,"startTime":"12:11:19","endTime":"12:11:19","coords":[[35.707540,139.760428],[35.707546,139.760495]]},{"id":331,"state":"加速","name":"加速","color":"#16e04d","categories":["acceleration"],"countedCategories":["acceleration"],"avgSpeed":25.7,"startTime":"12:11:20","endTime":"12:11:21","coords":[[35.707546,139.760495],[35.707552,139.760572],[35.707558,139.760662]]},{"id":332,"state":"加速・右カーブ","name":"加速・右カーブ","color":"#adf226","categories":["acceleration","rightTurn"],"countedCategories":["acceleration"],"avgSpeed":31.3,"startTime":"12:11:22","endTime":"12:11:22","coords":[[35.707558,139.760662],[35.707562,139.760765]]},{"id":333,"state":"直進・安定","name":"直進・安定","color":"#eab308","categories":["straight"],"countedCategories":[],"avgSpeed":34.1,"startTime":"12:11:23","endTime":"12:11:23","coords":[[35.707562,139.760765],[35.707565,139.760873]]},{"id":334,"state":"左カーブ","name":"左カーブ","color":"#00d1ff","categories":["leftTurn"],"countedCategories":[],"avgSpeed":36.5,"startTime":"12:11:24","endTime":"12:11:24","coords":[[35.707565,139.760873],[35.707570,139.760987]]},{"id":335,"state":"直進・安定","name":"直進・安定","color":"#eab308","categories":["straight"],"countedCategories":[],"avgSpeed":38.4,"startTime":"12:11:25","endTime":"12:11:25","coords":[[35.707570,139.760987],[35.707576,139.761104]]},{"id":336,"state":"右カーブ","name":"右カーブ","color":"#ff8c00","categories":["rightTurn"],"countedCategories":["rightTurn"],"avgSpeed":40.8,"startTime":"12:11:26","endTime":"12:11:27","coords":[[35.707576,139.761104],[35.707583,139.761232],[35.707592,139.761364]]},{"id":337,"state":"減速・右カーブ","name":"減速・右カーブ","color":"#fa2ea6","categories":["deceleration","rightTurn"],"countedCategories":["deceleration","rightTurn"],"avgSpeed":42.2,"startTime":"12:11:28","endTime":"12:11:28","coords":[[35.707592,139.761364],[35.707599,139.761494]]},{"id":338,"state":"減速","name":"減速","color":"#ff2626","categories":["deceleration"],"countedCategories":["deceleration"],"avgSpeed":41.9,"startTime":"12:11:29","endTime":"12:11:29","coords":[[35.707599,139.761494],[35.707600,139.761623]]},{"id":339,"state":"減速・右カーブ","name":"減速・右カーブ","color":"#fa2ea6","categories":["deceleration","rightTurn"],"countedCategories":["deceleration"],"avgSpeed":40.5,"startTime":"12:11:30","endTime":"12:11:30","coords":[[35.707600,139.761623],[35.707603,139.761746]]},{"id":340,"state":"減速","name":"減速","color":"#ff2626","categories":["deceleration"],"countedCategories":["deceleration"],"avgSpeed":25.0,"startTime":"12:11:31","endTime":"12:11:37","coords":[[35.707603,139.761746],[35.707604,139.761860],[35.707603,139.761959],[35.707603,139.762043],[35.707604,139.762113],[35.707603,139.762170],[35.707603,139.762215],[35.707605,139.762246]]},{"id":341,"state":"直進・安定","name":"直進・安定","color":"#eab308","categories":["straight"],"countedCategories":[],"avgSpeed":5.8,"startTime":"12:11:38","endTime":"12:11:39","coords":[[35.707605,139.762246],[35.707598,139.762254],[35.707597,139.762266]]},{"id":342,"state":"加速","name":"加速","color":"#16e04d","categories":["acceleration"],"countedCategories":["acceleration"],"avgSpeed":13.1,"startTime":"12:11:40","endTime":"12:11:45","coords":[[35.707597,139.762266],[35.707596,139.762281],[35.707595,139.762306],[35.707594,139.762344],[35.707590,139.762395],[35.707585,139.762459],[35.707583,139.762529]]},{"id":343,"state":"左カーブ","name":"左カーブ","color":"#00d1ff","categories":["leftTurn"],"countedCategories":[],"avgSpeed":25.9,"startTime":"12:11:46","endTime":"12:11:46","coords":[[35.707583,139.762529],[35.707583,139.762616]]},{"id":344,"state":"直進・安定","name":"直進・安定","color":"#eab308","categories":["straight"],"countedCategories":[],"avgSpeed":29.4,"startTime":"12:11:47","endTime":"12:11:48","coords":[[35.707583,139.762616],[35.707583,139.762710],[35.707583,139.762808]]},{"id":345,"state":"左カーブ","name":"左カーブ","color":"#00d1ff","categories":["leftTurn"],"countedCategories":[],"avgSpeed":31.9,"startTime":"12:11:49","endTime":"12:11:49","coords":[[35.707583,139.762808],[35.707589,139.762912]]},{"id":346,"state":"直進・安定","name":"直進・安定","color":"#eab308","categories":["straight"],"countedCategories":[],"avgSpeed":34.1,"startTime":"12:11:50","endTime":"12:11:51","coords":[[35.707589,139.762912],[35.707589,139.763016],[35.707588,139.763126]]},{"id":347,"state":"減速","name":"減速","color":"#ff2626","categories":["deceleration"],"countedCategories":["deceleration"],"avgSpeed":28.3,"startTime":"12:11:52","endTime":"12:11:57","coords":[[35.707588,139.763126],[35.707586,139.763240],[35.707582,139.763352],[35.707584,139.763446],[35.707583,139.763526],[35.707582,139.763586],[35.707584,139.763628]]},{"id":348,"state":"減速・左カーブ","name":"減速・左カーブ","color":"#b340f2","categories":["deceleration","leftTurn"],"countedCategories":["deceleration","leftTurn"],"avgSpeed":11.9,"startTime":"12:11:58","endTime":"12:11:58","coords":[[35.707584,139.763628],[35.707586,139.763655]]},{"id":349,"state":"左カーブ","name":"左カーブ","color":"#00d1ff","categories":["leftTurn"],"countedCategories":["leftTurn"],"avgSpeed":11.1,"startTime":"12:11:59","endTime":"12:12:02","coords":[[35.707586,139.763655],[35.707591,139.763677],[35.707601,139.763690],[35.707617,139.763706],[35.707639,139.763714]]},{"id":350,"state":"加速","name":"加速","color":"#16e04d","categories":["acceleration"],"countedCategories":["acceleration"],"avgSpeed":16.7,"startTime":"12:12:03","endTime":"12:12:04","coords":[[35.707639,139.763714],[35.707669,139.763716],[35.707715,139.763714]]},{"id":351,"state":"加速・左カーブ","name":"加速・左カーブ","color":"#2673ff","categories":["acceleration","leftTurn"],"countedCategories":["acceleration"],"avgSpeed":21.6,"startTime":"12:12:05","endTime":"12:12:05","coords":[[35.707715,139.763714],[35.707779,139.763711]]},{"id":352,"state":"加速・右カーブ","name":"加速・右カーブ","color":"#adf226","categories":["acceleration","rightTurn"],"countedCategories":["acceleration","rightTurn"],"avgSpeed":26.2,"startTime":"12:12:06","endTime":"12:12:07","coords":[[35.707779,139.763711],[35.707844,139.763713],[35.707916,139.763708]]},{"id":353,"state":"右カーブ","name":"右カーブ","color":"#ff8c00","categories":["rightTurn"],"countedCategories":["rightTurn"],"avgSpeed":29.7,"startTime":"12:12:08","endTime":"12:12:08","coords":[[35.707916,139.763708],[35.707994,139.763701]]},{"id":354,"state":"減速","name":"減速","color":"#ff2626","categories":["deceleration"],"countedCategories":["deceleration"],"avgSpeed":30.8,"startTime":"12:12:09","endTime":"12:12:09","coords":[[35.707994,139.763701],[35.708072,139.763697]]},{"id":355,"state":"減速・右カーブ","name":"減速・右カーブ","color":"#fa2ea6","categories":["deceleration","rightTurn"],"countedCategories":["deceleration"],"avgSpeed":30.2,"startTime":"12:12:10","endTime":"12:12:10","coords":[[35.708072,139.763697],[35.708147,139.763694]]},{"id":356,"state":"減速","name":"減速","color":"#ff2626","categories":["deceleration"],"countedCategories":["deceleration"],"avgSpeed":26.8,"startTime":"12:12:11","endTime":"12:12:12","coords":[[35.708147,139.763694],[35.708217,139.763691],[35.708274,139.763689]]},{"id":357,"state":"減速・右カーブ","name":"減速・右カーブ","color":"#fa2ea6","categories":["deceleration","rightTurn"],"countedCategories":["deceleration","rightTurn"],"avgSpeed":20.4,"startTime":"12:12:13","endTime":"12:12:14","coords":[[35.708274,139.763689],[35.708326,139.763686],[35.708370,139.763681]]},{"id":358,"state":"減速","name":"減速","color":"#ff2626","categories":["deceleration"],"countedCategories":["deceleration"],"avgSpeed":11.7,"startTime":"12:12:15","endTime":"12:12:18","coords":[[35.708370,139.763681],[35.708410,139.763679],[35.708445,139.763677],[35.708469,139.763676],[35.708482,139.763677]]},{"id":359,"state":"直進・安定","name":"直進・安定","color":"#eab308","categories":["straight"],"countedCategories":[],"avgSpeed":0.9,"startTime":"12:12:19","endTime":"12:12:22","coords":[[35.708482,139.763677],[35.708484,139.763676],[35.708484,139.763677],[35.708485,139.763677],[35.708485,139.763677]]},{"id":360,"state":"加速","name":"加速","color":"#16e04d","categories":["acceleration"],"countedCategories":["acceleration"],"avgSpeed":1.1,"startTime":"12:12:23","endTime":"12:12:25","coords":[[35.708485,139.763677],[35.708485,139.763677],[35.708486,139.763677],[35.708495,139.763678]]},{"id":361,"state":"直進・安定","name":"直進・安定","color":"#eab308","categories":["straight"],"countedCategories":[],"avgSpeed":6.1,"startTime":"12:12:26","endTime":"12:12:26","coords":[[35.708495,139.763678],[35.708519,139.763678]]},{"id":362,"state":"減速","name":"減速","color":"#ff2626","categories":["deceleration"],"countedCategories":[],"avgSpeed":8.8,"startTime":"12:12:27","endTime":"12:12:28","coords":[[35.708519,139.763678],[35.708546,139.763678],[35.708565,139.763678]]},{"id":363,"state":"直進・安定","name":"直進・安定","color":"#eab308","categories":["straight"],"countedCategories":[],"avgSpeed":1.1,"startTime":"12:12:29","endTime":"12:12:44","coords":[[35.708565,139.763678],[35.708576,139.763677],[35.708584,139.763677],[35.708589,139.763676],[35.708593,139.763676],[35.708594,139.763676],[35.708593,139.763676],[35.708593,139.763676],[35.708593,139.763676],[35.708593,139.763676],[35.708593,139.763676],[35.708593,139.763676],[35.708593,139.763676],[35.708593,139.763676],[35.708593,139.763676],[35.708593,139.763676],[35.708596,139.763677]]},{"id":364,"state":"加速","name":"加速","color":"#16e04d","categories":["acceleration"],"countedCategories":["acceleration"],"avgSpeed":2.8,"startTime":"12:12:45","endTime":"12:12:46","coords":[[35.708596,139.763677],[35.708601,139.763677],[35.708616,139.763676]]},{"id":365,"state":"直進・安定","name":"直進・安定","color":"#eab308","categories":["straight"],"countedCategories":[],"avgSpeed":9.9,"startTime":"12:12:47","endTime":"12:12:48","coords":[[35.708616,139.763676],[35.708644,139.763675],[35.708677,139.763674]]},{"id":366,"state":"減速・左カーブ","name":"減速・左カーブ","color":"#b340f2","categories":["deceleration","leftTurn"],"countedCategories":["deceleration"],"avgSpeed":13.3,"startTime":"12:12:49","endTime":"12:12:49","coords":[[35.708677,139.763674],[35.708712,139.763672]]},{"id":367,"state":"減速・右カーブ","name":"減速・右カーブ","color":"#fa2ea6","categories":["deceleration","rightTurn"],"countedCategories":["deceleration"],"avgSpeed":13.7,"startTime":"12:12:50","endTime":"12:12:50","coords":[[35.708712,139.763672],[35.708749,139.763673]]},{"id":368,"state":"減速","name":"減速","color":"#ff2626","categories":["deceleration"],"countedCategories":["deceleration"],"avgSpeed":9.9,"startTime":"12:12:51","endTime":"12:12:55","coords":[[35.708749,139.763673],[35.708783,139.763674],[35.708815,139.763676],[35.708838,139.763678],[35.708856,139.763681],[35.708869,139.763682]]},{"id":369,"state":"直進・安定","name":"直進・安定","color":"#eab308","categories":["straight"],"countedCategories":[],"avgSpeed":5.5,"startTime":"12:12:56","endTime":"12:12:56","coords":[[35.708869,139.763682],[35.708879,139.763682]]},{"id":370,"state":"加速・左カーブ","name":"加速・左カーブ","color":"#2673ff","categories":["acceleration","leftTurn"],"countedCategories":[],"avgSpeed":5.9,"startTime":"12:12:57","endTime":"12:12:57","coords":[[35.708879,139.763682],[35.708885,139.763678]]},{"id":371,"state":"右カーブ","name":"右カーブ","color":"#ff8c00","categories":["rightTurn"],"countedCategories":[],"avgSpeed":7.7,"startTime":"12:12:58","endTime":"12:12:58","coords":[[35.708885,139.763678],[35.708894,139.763671]]},{"id":372,"state":"左カーブ","name":"左カーブ","color":"#00d1ff","categories":["leftTurn"],"countedCategories":[],"avgSpeed":9.2,"startTime":"12:12:59","endTime":"12:12:59","coords":[[35.708894,139.763671],[35.708900,139.763660]]},{"id":373,"state":"直進・安定","name":"直進・安定","color":"#eab308","categories":["straight"],"countedCategories":[],"avgSpeed":8.7,"startTime":"12:13:00","endTime":"12:13:00","coords":[[35.708900,139.763660],[35.708900,139.763654]]},{"id":374,"state":"左カーブ","name":"左カーブ","color":"#00d1ff","categories":["leftTurn"],"countedCategories":[],"avgSpeed":7.7,"startTime":"12:13:01","endTime":"12:13:01","coords":[[35.708900,139.763654],[35.708902,139.763668]]},{"id":375,"state":"右カーブ","name":"右カーブ","color":"#ff8c00","categories":["rightTurn"],"countedCategories":["rightTurn"],"avgSpeed":7.2,"startTime":"12:13:02","endTime":"12:13:02","coords":[[35.708902,139.763668],[35.708904,139.763669]]},{"id":376,"state":"加速・右カーブ","name":"加速・右カーブ","color":"#adf226","categories":["acceleration","rightTurn"],"countedCategories":["rightTurn"],"avgSpeed":6.3,"startTime":"12:13:03","endTime":"12:13:03","coords":[[35.708904,139.763669],[35.708911,139.763670]]},{"id":377,"state":"右カーブ","name":"右カーブ","color":"#ff8c00","categories":["rightTurn"],"countedCategories":["rightTurn"],"avgSpeed":6.2,"startTime":"12:13:04","endTime":"12:13:06","coords":[[35.708911,139.763670],[35.708924,139.763671],[35.708946,139.763675],[35.708957,139.763684]]},{"id":378,"state":"減速・右カーブ","name":"減速・右カーブ","color":"#fa2ea6","categories":["deceleration","rightTurn"],"countedCategories":["deceleration","rightTurn"],"avgSpeed":5.8,"startTime":"12:13:07","endTime":"12:13:08","coords":[[35.708957,139.763684],[35.708982,139.763692],[35.709010,139.763700]]},{"id":379,"state":"右カーブ","name":"右カーブ","color":"#ff8c00","categories":["rightTurn"],"countedCategories":["rightTurn"],"avgSpeed":4.5,"startTime":"12:13:09","endTime":"12:13:09","coords":[[35.709010,139.763700],[35.709028,139.763705]]},{"id":380,"state":"直進・安定","name":"直進・安定","color":"#eab308","categories":["straight"],"countedCategories":[],"avgSpeed":4.0,"startTime":"12:13:10","endTime":"12:13:11","coords":[[35.709028,139.763705],[35.709043,139.763699],[35.709050,139.763712]]},{"id":381,"state":"減速","name":"減速","color":"#ff2626","categories":["deceleration"],"countedCategories":[],"avgSpeed":4.0,"startTime":"12:13:12","endTime":"12:13:12","coords":[[35.709050,139.763712],[35.709058,139.763714]]},{"id":382,"state":"直進・安定","name":"直進・安定","color":"#eab308","categories":["straight"],"countedCategories":[],"avgSpeed":2.0,"startTime":"12:13:13","endTime":"12:13:16","coords":[[35.709058,139.763714],[35.709062,139.763715],[35.709064,139.763716],[35.709064,139.763716],[35.709064,139.763716]]}];
+        const hasValidGPS = true;
+        let currentFilter = null;
+        let map = null;
+        let polylineLayers = [];
+        
+        function initMap() {
+            if (!hasValidGPS || !routeData || routeData.length === 0) {
+                document.getElementById('interactive-map').style.display = 'none';
+                document.getElementById('static-fallback-container').style.display = 'block';
+                return;
+            }
+            
+            try {
+                map = L.map('interactive-map', {
+                    zoomControl: true,
+                    attributionControl: true
+                });
+                
+                // 国土地理院タイル (淡色地図 & 標準地図)
+                const gsiPale = L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png', {
+                    maxZoom: 18,
+                    minZoom: 2,
+                    attribution: '&copy; <a href="https://maps.gsi.go.jp/development/ichiran.html" target="_blank">国土地理院 (淡色地図)</a>'
+                });
+                
+                const gsiStd = L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png', {
+                    maxZoom: 18,
+                    minZoom: 2,
+                    attribution: '&copy; <a href="https://maps.gsi.go.jp/development/ichiran.html" target="_blank">国土地理院 (標準地図)</a>'
+                });
+                
+                // デフォルトで淡色地図を表示 (軌跡の色が鮮明に際立つため)
+                gsiPale.addTo(map);
+                
+                // レイヤー切り替えコントロール (淡色地図 / 標準地図)
+                const baseMaps = {
+                    "国土地理院 淡色地図": gsiPale,
+                    "国土地理院 標準地図": gsiStd
+                };
+                L.control.layers(baseMaps, null, { position: 'topright' }).addTo(map);
+                
+                let allCoords = [];
+                
+                routeData.forEach(function(chunk) {
+                    let poly = L.polyline(chunk.coords, {
+                        color: chunk.color,
+                        weight: 5,
+                        opacity: 0.95,
+                        lineCap: 'round',
+                        lineJoin: 'round'
+                    }).addTo(map);
+                    
+                    poly.chunkData = chunk;
+                    
+                    let popupHTML = `
+                        <div style="font-size:13px; line-height:1.5;">
+                            <div style="font-weight:bold; font-size:14px; margin-bottom:4px; color:${chunk.color};">
+                                ● ${chunk.name}
+                            </div>
+                            <div><b>時間帯:</b> ${chunk.startTime} 〜 ${chunk.endTime}</div>
+                            <div><b>平均速度:</b> ${chunk.avgSpeed} km/h</div>
+                            <div><b>地点数:</b> ${chunk.coords.length} 地点</div>
+                        </div>
+                    `;
+                    poly.bindPopup(popupHTML);
+                    
+                    polylineLayers.push(poly);
+                    chunk.coords.forEach(c => allCoords.push(c));
+                });
+                
+                if (allCoords.length > 0) {
+                    map.fitBounds(allCoords, { padding: [35, 35] });
+                    
+                    // 始点ピン (緑丸)
+                    let startCoord = allCoords[0];
+                    let startIcon = L.divIcon({
+                        className: 'custom-pin',
+                        html: '<div style="background:#16e04d; width:16px; height:16px; border-radius:50%; border:3px solid #fff; box-shadow:0 0 8px rgba(0,0,0,0.7);"></div>',
+                        iconSize: [22, 22],
+                        iconAnchor: [11, 11]
+                    });
+                    L.marker(startCoord, { icon: startIcon }).addTo(map).bindPopup('<b>スタート地点</b>');
+                    
+                    // 終点ピン (赤丸)
+                    let endCoord = allCoords[allCoords.length - 1];
+                    let endIcon = L.divIcon({
+                        className: 'custom-pin',
+                        html: '<div style="background:#ff2626; width:16px; height:16px; border-radius:50%; border:3px solid #fff; box-shadow:0 0 8px rgba(0,0,0,0.7);"></div>',
+                        iconSize: [22, 22],
+                        iconAnchor: [11, 11]
+                    });
+                    L.marker(endCoord, { icon: endIcon }).addTo(map).bindPopup('<b>ゴール地点</b>');
+                }
+            } catch (e) {
+                console.error("Leaflet map load error, fallback to static image:", e);
+                document.getElementById('interactive-map').style.display = 'none';
+                document.getElementById('static-fallback-container').style.display = 'block';
+            }
+        }
+        
+        function toggleFilter(category) {
+            if (!currentFilter || currentFilter.category !== category) {
+                // 1回目クリック: 該当全区間
+                applyFilter(category, 'all');
+            } else if (currentFilter.mode === 'all') {
+                // 2回目クリック: カウント確定区間のみ
+                applyFilter(category, 'counted');
+            } else {
+                // 3回目クリック: 解除 (元に戻る)
+                clearFilter();
+            }
+        }
+        
+        function applyFilter(category, mode) {
+            currentFilter = { category: category, mode: mode };
+            
+            document.querySelectorAll('.count-item').forEach(function(el) {
+                if (el.getAttribute('data-filter') === category) {
+                    el.classList.add('active');
+                    let hint = el.querySelector('.count-hint');
+                    if (mode === 'counted') {
+                        el.classList.add('counted-mode');
+                        if (hint) hint.innerHTML = 'クリックで解除';
+                    } else {
+                        el.classList.remove('counted-mode');
+                        if (hint) hint.innerHTML = 'クリックで確定のみ';
+                    }
+                } else {
+                    el.classList.remove('active');
+                    el.classList.remove('counted-mode');
+                    let hint = el.querySelector('.count-hint');
+                    if (hint) hint.innerHTML = 'クリックで強調';
+                }
+            });
+            
+            document.getElementById('reset-filter-btn').style.display = 'inline-block';
+            
+            const names = {
+                'rightTurn': '右カーブ',
+                'leftTurn': '左カーブ',
+                'acceleration': '加速',
+                'deceleration': '減速',
+                'paused': '一時停止',
+                'straight': '直進'
+            };
+            
+            const modeLabel = (mode === 'counted') ? '【カウント確定区間のみ (1秒以上継続)】' : '【該当全区間】';
+            const nextHint = (mode === 'counted') ? '再クリックで解除' : '再クリックで確定のみ絞り込み';
+            document.getElementById('filter-banner-text').innerHTML = `現在 <b>${names[category] || category} ${modeLabel}</b> を強調表示中（${nextHint}）`;
+            
+            polylineLayers.forEach(function(poly) {
+                let chunk = poly.chunkData;
+                let matches = false;
+                if (mode === 'counted') {
+                    matches = chunk.countedCategories && chunk.countedCategories.includes(category);
+                } else {
+                    matches = chunk.categories && chunk.categories.includes(category);
+                }
+                
+                if (matches) {
+                    poly.setStyle({
+                        color: chunk.color,
+                        weight: (mode === 'counted') ? 8 : 6.5,
+                        opacity: 1.0
+                    });
+                    poly.bringToFront();
+                } else {
+                    poly.setStyle({
+                        color: '#6b7280',
+                        weight: 3,
+                        opacity: 0.25
+                    });
+                }
+            });
+        }
+        
+        function clearFilter() {
+            currentFilter = null;
+            document.querySelectorAll('.count-item').forEach(function(el) {
+                el.classList.remove('active');
+                el.classList.remove('counted-mode');
+                let hint = el.querySelector('.count-hint');
+                if (hint) hint.innerHTML = 'クリックで強調';
+            });
+            document.getElementById('reset-filter-btn').style.display = 'none';
+            document.getElementById('filter-banner-text').innerHTML = '挙動カード（右カーブ・加速など）をクリックすると、マップ上の該当区間をハイライト・他をグレーアウトできます。（1回目: 該当全区間 → 2回目: カウント確定のみ → 3回目: 解除）';
+            
+            polylineLayers.forEach(function(poly) {
+                let chunk = poly.chunkData;
+                poly.setStyle({
+                    color: chunk.color,
+                    weight: 5,
+                    opacity: 0.95
+                });
+            });
+        }
+        
+        function resetMapView() {
+            if (map && polylineLayers.length > 0) {
+                let allCoords = [];
+                routeData.forEach(function(chunk) {
+                    chunk.coords.forEach(c => allCoords.push(c));
+                });
+                if (allCoords.length > 0) {
+                    map.fitBounds(allCoords, { padding: [35, 35] });
+                }
+            }
+        }
+        
+        window.addEventListener('DOMContentLoaded', initMap);
+    </script>
+</body>
+</html>
